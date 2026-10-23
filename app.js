@@ -354,7 +354,9 @@ function renderExpenses(c){
 function renderSettings(){
   const by={};state.integrations.forEach(x=>by[x.provider]=x);
   const sh=by.shopify,me=by.meta;
-  $("shopify-status").textContent=sh?"Connected":"Not connected";$("shopify-status").classList.toggle("good",!!sh);
+  const trackerInstalled=Boolean(sh?.metadata?.tracker_installed);
+  $("shopify-status").textContent=sh?(trackerInstalled?"Connected + tracking":"Connected"):"Not connected";$("shopify-status").classList.toggle("good",!!sh);
+  if($("install-tracker")) $("install-tracker").textContent=trackerInstalled?"Tracker installed ✓":"Install first-party tracker";
   $("meta-status").textContent=me?"Connected":"Not connected";$("meta-status").classList.toggle("good",!!me);
   $("integration-list").innerHTML=state.integrations.length?state.integrations.map(x=>'<div class="integration-row"><div><b>'+esc(x.provider)+'</b><small>'+(x.last_sync_at?"Last synced "+new Date(x.last_sync_at).toLocaleString():"Connected · never synced")+'</small></div><span class="status-badge '+(x.last_error?"":"good")+'">'+(x.last_error?"Error":"Connected")+'</span></div>').join(""):'<div class="empty">No API connections yet.</div>';
 }
@@ -371,6 +373,12 @@ $("shopify-form").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.t
 $("meta-form").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{const j=await invoke("saveMeta",Object.fromEntries(f));toast(j.message);await loadAll()}catch(err){toast(err.message,"bad")}};
 $("sync-shopify").onclick=()=>sync("syncShopify",$("sync-shopify"));
 $("sync-meta").onclick=()=>sync("syncMeta",$("sync-meta"));
+$("install-tracker").onclick=async()=>{
+  const btn=$("install-tracker"),old=btn.textContent;btn.disabled=true;btn.textContent="Installing…";
+  try{const r=await invoke("installTracker");toast(r.message||"Tracker installed");await loadAll()}
+  catch(err){toast(err.message,"bad")}
+  finally{btn.disabled=false;btn.textContent=old}
+};
 async function sync(action,btn){const old=btn.textContent;btn.disabled=true;btn.textContent="Syncing…";try{const j=await invoke(action);toast(j.message);await loadAll()}catch(err){toast(err.message,"bad")}finally{btn.disabled=false;btn.textContent=old}}
 
 $("expense-form").onsubmit=async e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));try{await invoke("addExpense",f);toast("Expense added");e.target.reset();await loadData();render()}catch(err){toast(err.message,"bad")}};
