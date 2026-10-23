@@ -478,8 +478,8 @@ function renderSettings(){
   if($("shopify-card"))$("shopify-card").classList.toggle("hidden",connected&&!state.editingShopify&&!state.addingStore);
   if($("cancel-shopify-edit"))$("cancel-shopify-edit").classList.toggle("hidden",!connected&&!state.addingStore);
 
-  $("shopify-status").textContent=connected?(permissionsOk===false?"Connected · needs permissions":(trackerInstalled?"Connected + tracking":"Connected")):"Not connected";
-  $("shopify-status").classList.toggle("good",connected&&permissionsOk!==false);
+  $("shopify-status").textContent=connected?(permissionsOk===false?"Connected · needs permissions":(permissionsOk===true?(trackerInstalled?"Connected + tracking":"Connected"):"Connected · verify permissions")):"Not connected";
+  $("shopify-status").classList.toggle("good",connected&&permissionsOk===true);
 
   if(connected){
     $("connected-store-name").textContent=state.store?.name||"Shopify store";
@@ -492,10 +492,11 @@ function renderSettings(){
     $("connected-store-tracker").textContent=trackerInstalled?"Installed":"Not installed";
 
     const warning=$("shopify-permission-warning");
-    if(permissionsOk===false||sh.last_error){
+    if(permissionsOk!==true||sh.last_error){
       warning.classList.remove("hidden");
-      const detail=missing.length?("Missing: "+missing.join(", ")):(sh.last_error||"Shopify permissions need attention.");
-      warning.innerHTML='<i class="fa-solid fa-triangle-exclamation"></i><div><b>Connection needs permissions</b><span>'+esc(detail)+'</span><small>Open Repair connection after updating the app scopes in Shopify Dev Dashboard.</small></div>';
+      const unverified=permissionsOk==null&&!sh.last_error;
+      const detail=missing.length?("Missing: "+missing.join(", ")):(sh.last_error||(unverified?"Permissions have not been verified by a successful sync yet.":"Shopify permissions need attention."));
+      warning.innerHTML='<i class="fa-solid fa-triangle-exclamation"></i><div><b>'+(unverified?"Verify Shopify permissions":"Connection needs permissions")+'</b><span>'+esc(detail)+'</span><small>Required: read_orders, read_products, read_customers. Optional: read_all_orders for 365-day history and write_themes for automatic tracker installation.</small></div>';
     }else warning.classList.add("hidden");
   }
 
