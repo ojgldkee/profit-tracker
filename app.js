@@ -3,7 +3,7 @@ const SUPABASE_KEY="sb_publishable_Ow4gfh354q6hFXNtkEVIqg_VGUEbvqL";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const API=SUPABASE_URL+"/functions/v1/profit-api";
 
-const state={session:null,store:null,daily:[],dailyAll:[],previousDaily:[],ads:[],orders:[],products:[],expenses:[],creatives:[],customerDaily:[],customerSummary:null,subscriptions:[],subscriptionSummary:null,attributionSummary:[],integrations:[],runs:[],range:7,provider:"all",authMode:"signin"};
+const state={session:null,store:null,daily:[],dailyAll:[],previousDaily:[],ads:[],orders:[],products:[],expenses:[],creatives:[],customerDaily:[],customerSummary:null,subscriptions:[],subscriptionSummary:null,subscriptionStatuses:[],cohortMonthly:[],cohortWeekly:[],anomalyAlerts:[],attributionSummary:[],integrations:[],runs:[],range:7,provider:"all",authMode:"signin"};
 
 const $=id=>document.getElementById(id);
 const money=(v,c="USD")=>new Intl.NumberFormat("en-US",{style:"currency",currency:c,maximumFractionDigits:2}).format(Number(v||0));
@@ -82,11 +82,11 @@ async function loadAll(){
 }
 
 async function loadData(){
-  const extendedDays=Math.max(state.range*2,15);
+  const extendedDays=Math.max(state.range*2,30);
   const extendedStart=isoStart(extendedDays);
   const currentStart=isoStart(state.range);
   const storeId=state.store?.id;if(!storeId)return;
-  const [dailyAll,ads,orders,products,expenses,creatives,customerDaily,customerSummary,subscriptions,subscriptionSummary,attributionSummary]=await Promise.all([
+  const [dailyAll,ads,orders,products,expenses,creatives,customerDaily,customerSummary,subscriptions,subscriptionSummary,subscriptionStatuses,cohortMonthly,cohortWeekly,anomalyAlerts,attributionSummary]=await Promise.all([
     sb.from("daily_profit").select("*").eq("store_id",storeId).gte("day",extendedStart).order("day"),
     sb.from("ad_daily").select("*").eq("store_id",storeId).gte("day",currentStart).order("spend",{ascending:false}),
     sb.from("order_profitability").select("*").eq("store_id",storeId).gte("created_at",currentStart+"T00:00:00Z").order("created_at",{ascending:false}).limit(500),
@@ -97,9 +97,13 @@ async function loadData(){
     sb.from("customer_summary").select("*").eq("store_id",storeId).maybeSingle(),
     sb.from("subscription_contract_economics").select("*").eq("store_id",storeId).order("ltv_contribution_profit",{ascending:false}).limit(300),
     sb.from("subscription_summary").select("*").eq("store_id",storeId).maybeSingle(),
+    sb.from("subscription_contract_status").select("*").eq("store_id",storeId),
+    sb.from("subscription_cohorts_monthly").select("*").eq("store_id",storeId).order("cohort_month").order("period_index"),
+    sb.from("subscription_cohorts_weekly").select("*").eq("store_id",storeId).order("cohort_week").order("period_index"),
+    sb.from("profit_anomaly_alerts").select("*").eq("store_id",storeId).gte("day",extendedStart).order("day",{ascending:false}).limit(20),
     sb.from("attribution_summary").select("*").eq("store_id",storeId)
   ]);
-  for(const x of [dailyAll,ads,orders,products,expenses,creatives,customerDaily,customerSummary,subscriptions,subscriptionSummary,attributionSummary])if(x.error)console.warn(x.error);
+  for(const x of [dailyAll,ads,orders,products,expenses,creatives,customerDaily,customerSummary,subscriptions,subscriptionSummary,subscriptionStatuses,cohortMonthly,cohortWeekly,anomalyAlerts,attributionSummary])if(x.error)console.warn(x.error);
   state.dailyAll=dailyAll.data||[];
   state.daily=state.dailyAll.filter(x=>x.day>=currentStart);
   const prevEnd=new Date(new Date(currentStart+"T00:00:00Z").getTime()-86400000).toISOString().slice(0,10);
@@ -111,6 +115,10 @@ async function loadData(){
   state.customerSummary=customerSummary.data||null;
   state.subscriptions=subscriptions.data||[];
   state.subscriptionSummary=subscriptionSummary.data||null;
+  state.subscriptionStatuses=subscriptionStatuses.data||[];
+  state.cohortMonthly=cohortMonthly.data||[];
+  state.cohortWeekly=cohortWeekly.data||[];
+  state.anomalyAlerts=anomalyAlerts.data||[];
   state.attributionSummary=attributionSummary.data||[];
 }
 function summary(rows=state.daily){
@@ -141,6 +149,7 @@ function render(){
   ].join("");
 
   renderTrend();
+  renderTrendMetrics(currency);
   renderAlerts(s);
   renderPlatforms();
   renderTopAds();
@@ -149,6 +158,7 @@ function render(){
   renderCreatives(currency);
   renderCustomers(currency);
   renderSubscriptions(currency);
+  renderCohorts(currency);
   renderOrders(currency);
   renderProducts(currency);
   renderExpenses(currency);
@@ -231,11 +241,13 @@ function renderCreatives(currency){
   $("creative-grid").innerHTML=arr.length?arr.map(x=>{
     const thumb=x.thumbnail_url||x.media_url||"";
     const media=thumb?'<img src="'+esc(thumb)+'" loading="lazy" referrerpolicy="no-referrer" alt="">':'<div class="creative-placeholder">'+esc((x.media_type||x.format||"AD").toUpperCase())+'</div>';
+    const strength=x.data_strength||"early";
     return '<article class="creative-card">'+
       '<div class="creative-media">'+media+'<span class="provider">'+esc(x.provider||"unknown")+'</span></div>'+
       '<div class="creative-body"><div class="creative-head"><div><b>'+esc(x.ad_name||"Unnamed creative")+'</b><small>'+esc(x.campaign_name||"")+'</small></div><span class="signal '+esc(x.recommendation||"watch")+'">'+esc(x.recommendation||"watch")+'</span></div>'+
-      '<div class="creative-kpis"><div><span>Spend</span><b>'+money(x.spend,currency)+'</b></div><div><span>Orders</span><b>'+x.orders+'</b></div><div><span>Revenue</span><b>'+money(x.revenue,currency)+'</b></div><div><span>CPA</span><b>'+money(x.cpa,currency)+'</b></div><div><span>True ROAS</span><b>'+n(x.true_roas).toFixed(2)+'×</b></div><div><span>Profit</span><b class="'+(n(x.profit)>=0?"positive":"negative")+'">'+money(x.profit,currency)+'</b></div><div><span>Margin</span><b>'+pct(x.profit_margin)+'</b></div><div><span>Confidence</span><b>'+pct(x.attribution_confidence)+'</b></div></div>'+
-      '<div class="creative-tags"><span>Hook: '+esc(x.hook||"Not tagged")+'</span><span>Angle: '+esc(x.angle||"Not tagged")+'</span><span>Format: '+esc(x.format||x.media_type||"Unknown")+'</span><span>'+esc(String(x.days_running||1))+' days running</span></div>'+
+      '<div class="decision-note"><b>'+esc(strength)+' data</b><span>'+esc(x.decision_reason||"Waiting for enough spend and orders.")+'</span></div>'+
+      '<div class="creative-kpis"><div><span>Spend</span><b>'+money(x.spend,currency)+'</b></div><div><span>Orders</span><b>'+x.orders+'</b></div><div><span>Revenue</span><b>'+money(x.revenue,currency)+'</b></div><div><span>CPA</span><b>'+money(x.cpa,currency)+'</b></div><div><span>Break-even CPA</span><b>'+money(x.break_even_cpa||x.store_break_even_cpa,currency)+'</b></div><div><span>True ROAS</span><b>'+n(x.true_roas).toFixed(2)+'×</b></div><div><span>Profit</span><b class="'+(n(x.profit)>=0?"positive":"negative")+'">'+money(x.profit,currency)+'</b></div><div><span>Confidence</span><b>'+pct(x.attribution_confidence)+'</b></div></div>'+
+      '<div class="creative-tags"><span>Hook: '+esc(x.hook||"Not tagged")+'</span><span>Angle: '+esc(x.angle||"Not tagged")+'</span><span>Format: '+esc(x.format||x.media_type||"Unknown")+'</span><span>'+esc(String(x.days_running||1))+' days running</span><span>'+n(x.view_through_orders)+' view-through</span></div>'+
       '</div></article>';
   }).join(""):'<div class="empty">Sync ad data and Shopify attribution to populate creative profit.</div>';
 
@@ -245,10 +257,10 @@ function renderCreatives(currency){
     '<div class="coverage"><span>Deterministic orders</span><b>'+n(det.attributed_orders)+'</b><small>'+pct(det.avg_confidence||0)+' avg confidence</small></div>',
     '<div class="coverage"><span>First-party session matches</span><b>'+n(det.first_party_session_matches)+'</b><small>Session/cart evidence</small></div>',
     '<div class="coverage"><span>Modeled orders</span><b>'+n(modeled.attributed_orders)+'</b><small>'+pct(modeled.avg_confidence||0)+' avg confidence</small></div>',
+    '<div class="coverage"><span>View-through matches</span><b>'+n(blend.view_through_orders||det.view_through_orders)+'</b><small>Only counted when a provider supplies deterministic post-view evidence</small></div>',
     '<div class="coverage"><span>Blended coverage</span><b>'+n(blend.attributed_orders)+'</b><small>'+money(blend.attributed_revenue||0,currency)+' revenue mapped</small></div>'
   ].join("");
 }
-
 function renderCustomers(currency){
   const rows=state.customerDaily||[],cs=state.customerSummary||{};
   const newOrders=sum(rows,"new_orders"),retOrders=sum(rows,"returning_orders"),newRev=sum(rows,"new_revenue"),retRev=sum(rows,"returning_revenue"),adSpend=sum(rows,"ad_spend"),newProfit=sum(rows,"new_customer_profit");
@@ -268,15 +280,52 @@ function renderCustomers(currency){
 
 function renderSubscriptions(currency){
   const ss=state.subscriptionSummary||{},arr=state.subscriptions||[];
+  const statusMap=Object.fromEntries((state.subscriptionStatuses||[]).map(x=>[x.subscription_contract_id,x]));
+  const confirmedStatuses=(state.subscriptionStatuses||[]).filter(x=>x.status_confirmed);
+  const confirmedChurn=confirmedStatuses.filter(x=>["CANCELLED","EXPIRED","FAILED"].includes(String(x.status||"").toUpperCase())).length;
+  const churnRate=confirmedStatuses.length?confirmedChurn/confirmedStatuses.length:n(ss.churn_rate||0);
   $("subscription-metrics").innerHTML=[
     metric("Subscriptions",String(n(ss.subscriptions)),"Detected Shopify selling-plan cohorts"),
     metric("Rebill revenue",money(ss.rebill_revenue||0,currency),"Revenue after first order"),
-    metric("Churn",pct(ss.churn_rate||0),n(ss.churned_subscriptions)+" churned"),
+    metric("Churn",pct(churnRate),confirmedStatuses.length?"Confirmed provider status":"Inferred until provider status is available"),
     metric("LTV",money(ss.avg_ltv||0,currency),"Average subscription revenue"),
     metric("30-day profit",money(ss.avg_contribution_30d||0,currency),"Average cohort contribution"),
     metric("CAC payback",ss.avg_cac_payback_days==null?"—":Math.round(n(ss.avg_cac_payback_days))+" days","Average payback")
   ].join("");
-  $("subscriptions-body").innerHTML=arr.length?arr.map(x=>'<tr><td><b>'+esc(String(x.subscription_contract_id).split("|").slice(-1)[0])+'</b><small>'+new Date(x.first_order_at).toLocaleDateString()+'</small></td><td>'+x.orders+'</td><td>'+x.rebill_orders+'</td><td>'+money(x.first_order_profit,currency)+'</td><td>'+money(x.rebill_revenue,currency)+'</td><td>'+money(x.ltv_revenue,currency)+'</td><td>'+money(x.contribution_30d,currency)+'</td><td>'+money(x.contribution_60d,currency)+'</td><td>'+money(x.contribution_90d,currency)+'</td><td>'+(x.cac_payback_days==null?"—":x.cac_payback_days+"d")+'</td></tr>').join(""):'<tr><td colspan="10" class="empty">Sync Shopify to detect subscription orders and rebills.</td></tr>';
+  $("subscriptions-body").innerHTML=arr.length?arr.map(x=>{
+    const st=statusMap[x.subscription_contract_id];
+    const label=st?.status||x.current_status||"Inferred active";
+    const confirmed=Boolean(st?.status_confirmed);
+    return '<tr><td><b>'+esc(String(x.subscription_contract_id).split("|").slice(-1)[0])+'</b><small>'+new Date(x.first_order_at).toLocaleDateString()+'</small></td>'+
+      '<td><span class="status-badge '+(confirmed?"good":"")+'">'+esc(label)+'</span><small>'+(confirmed?"Confirmed":"Inferred")+'</small></td>'+
+      '<td>'+x.orders+'</td><td>'+x.rebill_orders+'</td><td>'+money(x.first_order_profit,currency)+'</td><td>'+money(x.rebill_revenue,currency)+'</td><td>'+money(x.ltv_revenue,currency)+'</td><td>'+money(x.contribution_30d,currency)+'</td><td>'+money(x.contribution_60d,currency)+'</td><td>'+money(x.contribution_90d,currency)+'</td><td>'+(x.cac_payback_days==null?"—":x.cac_payback_days+"d")+'</td></tr>';
+  }).join(""):'<tr><td colspan="11" class="empty">Sync Shopify to detect subscription orders and rebills.</td></tr>';
+}
+
+function cohortHeatmap(rows,labelKey,prefix,currency){
+  if(!rows.length)return '<div class="empty">More subscription history is needed for a cohort heatmap.</div>';
+  const cohorts=[...new Set(rows.map(x=>x[labelKey]))];
+  const maxPeriod=Math.min(8,Math.max(...rows.map(x=>n(x.period_index))));
+  const maxAbs=Math.max(1,...rows.map(x=>Math.abs(n(x.contribution))));
+  let html='<table class="cohort-table"><thead><tr><th>Cohort</th>';
+  for(let p=0;p<=maxPeriod;p++)html+='<th>'+prefix+p+'</th>';
+  html+='</tr></thead><tbody>';
+  for(const cohort of cohorts){
+    html+='<tr><td><b>'+esc(new Date(cohort+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:labelKey==="cohort_week"?"numeric":undefined,year:"2-digit"}))+'</b></td>';
+    for(let p=0;p<=maxPeriod;p++){
+      const x=rows.find(r=>r[labelKey]===cohort&&n(r.period_index)===p);
+      if(!x){html+='<td class="cohort-empty">—</td>';continue}
+      const v=n(x.contribution),intensity=Math.min(.85,Math.abs(v)/maxAbs*.75+.1);
+      const bg=v>=0?'rgba(88,213,139,'+intensity+')':'rgba(255,111,119,'+intensity+')';
+      html+='<td style="background:'+bg+'" title="'+money(v,currency)+' contribution"><b>'+money(v,currency)+'</b><small>'+x.active_subscriptions+' subs</small></td>';
+    }
+    html+='</tr>';
+  }
+  return html+'</tbody></table>';
+}
+function renderCohorts(currency){
+  if($("cohort-monthly"))$("cohort-monthly").innerHTML=cohortHeatmap(state.cohortMonthly||[],"cohort_month","M",currency);
+  if($("cohort-weekly"))$("cohort-weekly").innerHTML=cohortHeatmap(state.cohortWeekly||[],"cohort_week","W",currency);
 }
 
 function renderTrend(){
@@ -287,18 +336,51 @@ function renderTrend(){
   }).join(""):'<div class="empty">Sync Shopify and ads to see the profit trend.</div>';
 }
 
-function renderAlerts(s){
-  const alerts=[];
-  if(!state.orders.length)alerts.push(["warn","Shopify order data is missing","Connect and sync Shopify so Profit Tracker can calculate real revenue and COGS."]);
-  if(!state.ads.length)alerts.push(["warn","No ad spend in this date range","Connect Meta or import another ad platform CSV to calculate profit after advertising."]);
-  if(s.profit<0)alerts.push(["bad","You are below contribution break-even","Selected-period contribution profit is "+money(s.profit)+"."]);
-  else if(s.margin>0.25)alerts.push(["good","Healthy contribution margin",pct(s.margin)+" remains after product, operating and ad costs."]);
-  if(s.adSpend&&s.mer<s.breakEvenRoas)alerts.push(["bad","Blended MER is below break-even",s.mer.toFixed(2)+"× blended MER vs "+s.breakEvenRoas.toFixed(2)+"× break-even ROAS."]);
-  else if(s.adSpend)alerts.push(["good","Blended advertising is above break-even",s.mer.toFixed(2)+"× MER vs "+s.breakEvenRoas.toFixed(2)+"× break-even ROAS."]);
-  if(Math.abs(s.platformRoas-s.mer)>.5&&s.adSpend)alerts.push(["warn","Platform attribution disagrees with store revenue","Reported ROAS is "+s.platformRoas.toFixed(2)+"× while blended MER is "+s.mer.toFixed(2)+"×. Treat attributed revenue as directional."]);
-  $("alerts").innerHTML=alerts.slice(0,4).map(a=>'<div class="alert '+a[0]+'"><i></i><div><b>'+esc(a[1])+'</b><p>'+esc(a[2])+'</p></div></div>').join("")||'<div class="empty">No alerts yet.</div>';
+function sparkline(values){
+  const vals=values.map(n).filter(Number.isFinite);
+  if(vals.length<2)return '<div class="spark-empty">Not enough data</div>';
+  const w=220,h=64,p=5,min=Math.min(...vals),max=Math.max(...vals),range=max-min||1;
+  const pts=vals.map((v,i)=>((i/(vals.length-1))*(w-p*2)+p).toFixed(1)+','+(h-p-((v-min)/range)*(h-p*2)).toFixed(1)).join(' ');
+  return '<svg viewBox="0 0 '+w+' '+h+'" role="img"><polyline points="'+pts+'" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
+function renderTrendMetrics(currency){
+  const rows=[...state.daily].sort((a,b)=>a.day.localeCompare(b.day));
+  const series={
+    cpa:rows.map(x=>n(x.orders)>0?n(x.ad_spend)/n(x.orders):0),
+    mer:rows.map(x=>n(x.ad_spend)>0?n(x.net_revenue)/n(x.ad_spend):0),
+    margin:rows.map(x=>n(x.net_revenue)>0?n(x.contribution_profit)/n(x.net_revenue):0),
+    aov:rows.map(x=>n(x.orders)>0?n(x.net_revenue)/n(x.orders):0),
+    becpa:rows.map(x=>n(x.orders)>0?n(x.pre_ad_contribution)/n(x.orders):0)
+  };
+  const last=a=>a.length?a[a.length-1]:0;
+  if($("trend-cpa")){$("trend-cpa").innerHTML=sparkline(series.cpa);$("trend-cpa-value").textContent=money(last(series.cpa),currency)}
+  if($("trend-mer")){$("trend-mer").innerHTML=sparkline(series.mer);$("trend-mer-value").textContent=last(series.mer).toFixed(2)+"×"}
+  if($("trend-margin")){$("trend-margin").innerHTML=sparkline(series.margin);$("trend-margin-value").textContent=pct(last(series.margin))}
+  if($("trend-aov")){$("trend-aov").innerHTML=sparkline(series.aov);$("trend-aov-value").textContent=money(last(series.aov),currency)}
+  if($("trend-becpa")){$("trend-becpa").innerHTML=sparkline(series.becpa);$("trend-becpa-value").textContent=money(last(series.becpa),currency)}
 }
 
+function renderAlerts(s){
+  const alerts=[];
+  const latestAuto=(state.anomalyAlerts||[]).slice(0,3);
+  latestAuto.forEach(a=>{
+    const type=String(a.alert_type||"");
+    const map={
+      profit_drop:["bad","Profit dropped abnormally","Contribution profit fell well below its recent 7-day baseline."],
+      spend_spike_unprofitable:["bad","Spend spiked while profit was negative","Ad spend jumped above its recent baseline without profitable contribution."],
+      cpa_spike:["warn","CPA spiked","CPA is materially above its recent 7-day average."],
+      mer_drop:["warn","MER dropped","Blended MER fell materially below its recent baseline."]
+    };
+    if(map[type])alerts.push(map[type]);
+  });
+  if(!state.orders.length)alerts.push(["warn","Shopify order data is missing","Connect and sync Shopify so Profit Tracker can calculate real revenue and COGS."]);
+  if(!state.ads.length)alerts.push(["warn","No ad spend in this date range","Connect Meta, Google or TikTok, or import a CSV."]);
+  if(s.profit<0)alerts.push(["bad","You are below contribution break-even","Selected-period contribution profit is "+money(s.profit)+"."]);
+  else if(s.margin>0.25)alerts.push(["good","Healthy contribution margin",pct(s.margin)+" remains after product, operating and ad costs."]);
+  if(s.adSpend&&s.mer<s.breakEvenRoas)alerts.push(["bad","Blended MER is below break-even",s.mer.toFixed(2)+"× MER vs "+s.breakEvenRoas.toFixed(2)+"× break-even ROAS."]);
+  else if(s.adSpend)alerts.push(["good","Blended advertising is above break-even",s.mer.toFixed(2)+"× MER vs "+s.breakEvenRoas.toFixed(2)+"× break-even ROAS."]);
+  $("alerts").innerHTML=alerts.slice(0,5).map(a=>'<div class="alert '+a[0]+'"><i></i><div><b>'+esc(a[1])+'</b><p>'+esc(a[2])+'</p></div></div>').join("")||'<div class="empty">No alerts right now.</div>';
+}
 function platformAgg(){
   const map={};
   state.ads.forEach(a=>{const p=a.provider||"other";map[p]||={provider:p,spend:0,revenue:0,purchases:0,impressions:0,clicks:0};map[p].spend+=n(a.spend);map[p].revenue+=n(a.purchase_value);map[p].purchases+=n(a.purchases);map[p].impressions+=n(a.impressions);map[p].clicks+=n(a.clicks)});
@@ -316,9 +398,13 @@ function adAgg(){
 }
 function signal(roas){return roas>=3?"scale":roas>=2?"hold":roas>=1.5?"watch":"kill"}
 function renderTopAds(){
-  $("top-ads-body").innerHTML=adAgg().slice(0,8).map(a=>{const r=a.spend?a.revenue/a.spend:0;return '<tr><td><b>'+esc(a.ad_name)+'</b></td><td><span class="provider">'+esc(a.provider)+'</span></td><td>'+money(a.spend)+'</td><td>'+money(a.revenue)+'</td><td>'+r.toFixed(2)+'×</td><td>'+Math.round(a.purchases)+'</td><td><span class="signal '+signal(r)+'">'+signal(r)+'</span></td></tr>'}).join("")||'<tr><td colspan="7" class="empty">No ad data yet.</td></tr>';
+  const arr=(state.creatives||[]).filter(x=>n(x.spend)>0).sort((a,b)=>n(b.spend)-n(a.spend)).slice(0,8);
+  if(arr.length){
+    $("top-ads-body").innerHTML=arr.map(a=>'<tr><td><b>'+esc(a.ad_name)+'</b><small>'+esc(a.data_strength||"early")+' data</small></td><td><span class="provider">'+esc(a.provider)+'</span></td><td>'+money(a.spend)+'</td><td>'+money(a.revenue)+'</td><td>'+n(a.true_roas).toFixed(2)+'×</td><td>'+Math.round(n(a.orders))+'</td><td><span class="signal '+esc(a.recommendation||"watch")+'" title="'+esc(a.decision_reason||"")+'">'+esc(a.recommendation||"watch")+'</span></td></tr>').join("");
+  }else{
+    $("top-ads-body").innerHTML='<tr><td colspan="7" class="empty">No ad data yet.</td></tr>';
+  }
 }
-
 function renderProfit(s,c){
   $("profit-metrics").innerHTML=[metric("Gross sales",money(s.gross,c)),metric("Net revenue",money(s.net,c)),metric("Pre-ad contribution",money(s.preAd,c)),metric("Ad spend",money(s.adSpend,c)),metric("True profit",money(s.profit,c),"",s.profit>=0?"good":"bad"),metric("Margin",pct(s.margin))].join("");
   const rows=[["Gross sales",s.gross,"plus"],["Discounts",-sum(state.daily,"discounts"),"minus"],["Refunds",-s.refunds,"minus"],["COGS",-s.cogs,"minus"],["Fulfillment",-s.fulfillment,"minus"],["Payment fees",-s.fees,"minus"],["Variable costs",-s.variable,"minus"],["Ad spend",-s.adSpend,"minus"],["Operating expenses",-s.expenses,"minus"],["True contribution profit",s.profit,"total"]];
@@ -353,14 +439,15 @@ function renderExpenses(c){
 
 function renderSettings(){
   const by={};state.integrations.forEach(x=>by[x.provider]=x);
-  const sh=by.shopify,me=by.meta;
+  const sh=by.shopify,me=by.meta,go=by.google,tt=by.tiktok;
   const trackerInstalled=Boolean(sh?.metadata?.tracker_installed);
   $("shopify-status").textContent=sh?(trackerInstalled?"Connected + tracking":"Connected"):"Not connected";$("shopify-status").classList.toggle("good",!!sh);
-  if($("install-tracker")) $("install-tracker").textContent=trackerInstalled?"Tracker installed ✓":"Install first-party tracker";
+  if($("install-tracker")) $("install-tracker").textContent=trackerInstalled?"Tracker installed ✓":"Install first-party tracker automatically";
   $("meta-status").textContent=me?"Connected":"Not connected";$("meta-status").classList.toggle("good",!!me);
-  $("integration-list").innerHTML=state.integrations.length?state.integrations.map(x=>'<div class="integration-row"><div><b>'+esc(x.provider)+'</b><small>'+(x.last_sync_at?"Last synced "+new Date(x.last_sync_at).toLocaleString():"Connected · never synced")+'</small></div><span class="status-badge '+(x.last_error?"":"good")+'">'+(x.last_error?"Error":"Connected")+'</span></div>').join(""):'<div class="empty">No API connections yet.</div>';
+  if($("google-status")){$("google-status").textContent=go?"Connected":"Not connected";$("google-status").classList.toggle("good",!!go)}
+  if($("tiktok-status")){$("tiktok-status").textContent=tt?"Connected":"Not connected";$("tiktok-status").classList.toggle("good",!!tt)}
+  $("integration-list").innerHTML=state.integrations.length?state.integrations.map(x=>'<div class="integration-row"><div><b>'+esc(x.provider)+'</b><small>'+(x.last_sync_at?"Last synced "+new Date(x.last_sync_at).toLocaleString():"Connected · sync not run yet")+(x.last_error?'<br>'+esc(x.last_error):'')+'</small></div><span class="status-badge '+(x.last_error?"":"good")+'">'+(x.last_error?"Needs attention":"Connected")+'</span></div>').join(""):'<div class="empty">No API connections yet.</div>';
 }
-
 function renderHealth(){
   const synced=state.integrations.some(x=>x.last_sync_at);
   $("health-dot").classList.toggle("good",synced);
@@ -371,8 +458,12 @@ function renderHealth(){
 
 $("shopify-form").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{const j=await invoke("saveShopify",Object.fromEntries(f));toast(j.message);await loadAll()}catch(err){toast(err.message,"bad")}};
 $("meta-form").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{const j=await invoke("saveMeta",Object.fromEntries(f));toast(j.message);await loadAll()}catch(err){toast(err.message,"bad")}};
+if($("google-form"))$("google-form").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{const j=await invoke("saveGoogle",Object.fromEntries(f));toast(j.message);await loadAll()}catch(err){toast(err.message,"bad")}};
+if($("tiktok-form"))$("tiktok-form").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{const j=await invoke("saveTikTok",Object.fromEntries(f));toast(j.message);await loadAll()}catch(err){toast(err.message,"bad")}};
 $("sync-shopify").onclick=()=>sync("syncShopify",$("sync-shopify"));
 $("sync-meta").onclick=()=>sync("syncMeta",$("sync-meta"));
+if($("sync-google"))$("sync-google").onclick=()=>sync("syncGoogle",$("sync-google"));
+if($("sync-tiktok"))$("sync-tiktok").onclick=()=>sync("syncTikTok",$("sync-tiktok"));
 $("install-tracker").onclick=async()=>{
   const btn=$("install-tracker"),old=btn.textContent;btn.disabled=true;btn.textContent="Installing…";
   try{const r=await invoke("installTracker");toast(r.message||"Tracker installed");await loadAll()}
