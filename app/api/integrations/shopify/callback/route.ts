@@ -9,7 +9,7 @@ export async function GET(req:NextRequest){
   const secret=process.env.SHOPIFY_CLIENT_SECRET||"";
   const pairs=[...p.entries()].filter(([k])=>k!=="hmac"&&k!=="signature").sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`${k}=${v}`).join("&");
   const expected=crypto.createHmac("sha256",secret).update(pairs).digest("hex");
-  if(!secret||!crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(hmac))) return NextResponse.json({error:"Shopify HMAC verification failed."},{status:401});
+  const expectedBuf=Buffer.from(expected), hmacBuf=Buffer.from(hmac);\n  if(!secret||expectedBuf.length!==hmacBuf.length||!crypto.timingSafeEqual(expectedBuf,hmacBuf)) return NextResponse.json({error:"Shopify HMAC verification failed."},{status:401});
   const tokenRes=await fetch(`https://${shop}/admin/oauth/access_token`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({client_id:process.env.SHOPIFY_CLIENT_ID,client_secret:secret,code})});
   const token=await tokenRes.json();
   if(!tokenRes.ok||!token.access_token) return NextResponse.json({error:"Shopify token exchange failed.",detail:token},{status:502});
