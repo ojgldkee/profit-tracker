@@ -5,10 +5,18 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
   <meta name="theme-color" content="#090b0f"/>
   <title>Profit Tracker</title>
-  <link rel="stylesheet" href="./styles.css?v=1"/>
+  <link rel="stylesheet" href="./styles.css?v=2"/>
 </head>
 <body>
 <div id="toast"></div>
+<div id="metric-drawer" class="metric-drawer hidden">
+  <button id="metric-drawer-close" class="drawer-close">×</button>
+  <p class="kicker">METRIC EXPLAINER</p>
+  <h2 id="metric-drawer-title">Metric</h2>
+  <div id="metric-drawer-value" class="drawer-value"></div>
+  <p id="metric-drawer-formula" class="drawer-formula"></p>
+  <div id="metric-drawer-sources" class="drawer-sources"></div>
+</div>
 
 <div id="auth-screen" class="auth-screen">
   <div class="auth-card">
@@ -37,6 +45,9 @@
       <button class="active" data-page="overview"><i>⌂</i><span>Overview</span></button>
       <button data-page="profit"><i>↗</i><span>Profit</span></button>
       <button data-page="ads"><i>◎</i><span>Ads</span></button>
+      <button data-page="creatives"><i>◉</i><span>Creatives</span></button>
+      <button data-page="customers"><i>♙</i><span>Customers</span></button>
+      <button data-page="subscriptions"><i>↻</i><span>Subscriptions</span></button>
       <button data-page="orders"><i>≡</i><span>Orders</span></button>
       <button data-page="products"><i>◇</i><span>Products</span></button>
       <button data-page="expenses"><i>−</i><span>Expenses</span></button>
@@ -82,7 +93,8 @@
         </div>
       </div>
 
-      <div class="metric-grid" id="overview-metrics"></div>
+      <div class="comparison-strip" id="comparison-strip"></div>
+      <div class="metric-grid clickable-metrics" id="overview-metrics"></div>
 
       <div class="grid2">
         <article class="card chart-card">
@@ -126,6 +138,35 @@
       <article class="card">
         <div class="card-head"><div><p class="kicker">MULTI-PLATFORM LEDGER</p><h2>Campaign & creative performance</h2></div><small class="muted">Reported attribution is shown separately from store profit.</small></div>
         <div class="table-wrap"><table><thead><tr><th>Ad</th><th>Platform</th><th>Campaign</th><th>Spend</th><th>Purchases</th><th>Reported revenue</th><th>ROAS</th><th>CPA</th></tr></thead><tbody id="ads-body"></tbody></table></div>
+      </article>
+    </section>
+
+    <section id="page-creatives" class="page">
+      <div class="metric-grid" id="creative-metrics"></div>
+      <article class="card">
+        <div class="card-head"><div><p class="kicker">TRUE CREATIVE ECONOMICS</p><h2>Creative dashboard</h2></div><small class="muted">Shopify-attributed orders + real product economics, not just platform ROAS.</small></div>
+        <div id="creative-grid" class="creative-grid"></div>
+      </article>
+      <article class="card">
+        <div class="card-head"><div><p class="kicker">ATTRIBUTION COVERAGE</p><h2>How much of revenue is explainable?</h2></div></div>
+        <div id="attribution-coverage" class="coverage-grid"></div>
+      </article>
+    </section>
+
+    <section id="page-customers" class="page">
+      <div class="metric-grid" id="customer-metrics"></div>
+      <div class="grid2">
+        <article class="card"><div class="card-head"><div><p class="kicker">NEW CUSTOMER ECONOMICS</p><h2>Acquisition profitability</h2></div></div><div id="new-customer-panel"></div></article>
+        <article class="card"><div class="card-head"><div><p class="kicker">RETURNING CUSTOMER ECONOMICS</p><h2>Repeat purchase value</h2></div></div><div id="returning-customer-panel"></div></article>
+      </div>
+      <article class="card"><div class="card-head"><div><p class="kicker">CUSTOMER TREND</p><h2>New vs returning</h2></div></div><div id="customer-table" class="table-wrap"></div></article>
+    </section>
+
+    <section id="page-subscriptions" class="page">
+      <div class="metric-grid" id="subscription-metrics"></div>
+      <article class="card">
+        <div class="card-head"><div><p class="kicker">SUBSCRIPTION ECONOMICS</p><h2>First order → rebills → payback</h2></div><small class="muted">Uses Shopify selling plans and rebill orders.</small></div>
+        <div class="table-wrap"><table><thead><tr><th>Subscription</th><th>Orders</th><th>Rebills</th><th>First-order profit</th><th>Rebill revenue</th><th>LTV</th><th>30d profit</th><th>60d</th><th>90d</th><th>Payback</th></tr></thead><tbody id="subscriptions-body"></tbody></table></div>
       </article>
     </section>
 
@@ -208,6 +249,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js"></script>
-<script src="./app.js?v=1"></script>
+<script src="./app.js?v=2"></script>
 </body>
 </html>
