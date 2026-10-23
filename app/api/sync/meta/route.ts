@@ -9,15 +9,15 @@ export async function POST(){
   if(!store)return NextResponse.json({error:"Create/connect a store first."},{status:400});
   const cred=(await db.from("integration_credentials").select("*").eq("store_id",store.id).eq("provider","meta").maybeSingle()).data;
   if(!cred?.access_token)return NextResponse.json({error:"Meta is not connected."},{status:400});
-  let accountId=cred.external_account_id;
+  const version=process.env.META_API_VERSION||"v23.0";\n  let accountId=cred.external_account_id;
   if(!accountId){
-    const a=await fetch("https://graph.facebook.com/v23.0/me/adaccounts?fields=id,name,account_id&limit=50&access_token="+encodeURIComponent(cred.access_token));
+    const a=await fetch(`https://graph.facebook.com/${version}/me/adaccounts?fields=id,name,account_id&limit=50&access_token=`+encodeURIComponent(cred.access_token));
     const j=await a.json(); accountId=j.data?.[0]?.id;
     if(!accountId)return NextResponse.json({error:"No accessible Meta ad account found.",detail:j},{status:400});
     await db.from("integration_credentials").update({external_account_id:accountId,updated_at:new Date().toISOString()}).eq("id",cred.id);
   }
   const since=new Date(Date.now()-30*86400000).toISOString().slice(0,10), until=new Date().toISOString().slice(0,10);
-  const url=new URL(`https://graph.facebook.com/v23.0/${accountId}/insights`);
+  const url=new URL(`https://graph.facebook.com/${version}/${accountId}/insights`);
   url.searchParams.set("access_token",cred.access_token);
   url.searchParams.set("level","ad"); url.searchParams.set("time_increment","1"); url.searchParams.set("limit","500");
   url.searchParams.set("time_range",JSON.stringify({since,until}));
