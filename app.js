@@ -3,7 +3,7 @@ const SUPABASE_KEY="sb_publishable_Ow4gfh354q6hFXNtkEVIqg_VGUEbvqL";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const API=SUPABASE_URL+"/functions/v1/profit-api";
 
-const state={session:null,store:null,daily:[],dailyAll:[],previousDaily:[],ads:[],orders:[],products:[],expenses:[],creatives:[],customerDaily:[],customerSummary:null,subscriptions:[],subscriptionSummary:null,subscriptionStatuses:[],cohortMonthly:[],cohortWeekly:[],anomalyAlerts:[],attributionSummary:[],integrations:[],runs:[],range:7,provider:"all",authMode:"signin"};
+const state={session:null,store:null,stores:[],addingStore:false,editingShopify:false,daily:[],dailyAll:[],previousDaily:[],ads:[],orders:[],products:[],expenses:[],creatives:[],customerDaily:[],customerSummary:null,subscriptions:[],subscriptionSummary:null,subscriptionStatuses:[],cohortMonthly:[],cohortWeekly:[],anomalyAlerts:[],attributionSummary:[],integrations:[],runs:[],range:7,provider:"all",authMode:"signin"};
 
 const $=id=>document.getElementById(id);
 const money=(v,c="USD")=>new Intl.NumberFormat("en-US",{style:"currency",currency:c,maximumFractionDigits:2}).format(Number(v||0));
@@ -17,7 +17,7 @@ const toast=(msg,type="good")=>{const d=document.createElement("div");d.classNam
 async function invoke(action,payload={}){
   const token=state.session?.access_token;
   if(!token) throw new Error("Sign in first");
-  const r=await fetch(API,{method:"POST",headers:{"content-type":"application/json","authorization":"Bearer "+token,"apikey":SUPABASE_KEY},body:JSON.stringify({action,...payload})});
+  const r=await fetch(API,{method:"POST",headers:{"content-type":"application/json","authorization":"Bearer "+token,"apikey":SUPABASE_KEY},body:JSON.stringify({action,store_id:state.store?.id||null,...payload})});
   const j=await r.json().catch(()=>({}));
   if(!r.ok) throw new Error(j.error||"Request failed");
   return j;
@@ -71,15 +71,30 @@ function openPage(page){
 
 $("range-select").onchange=async e=>{state.range=Number(e.target.value);await loadData();render()};
 $("refresh-btn").onclick=async()=>{await loadAll();toast("Dashboard refreshed")};
+if($("store-select"))$("store-select").onchange=async e=>{
+  const id=e.target.value;if(!id)return;
+  localStorage.setItem("pt_store_id",id);
+  state.addingStore=false;state.editingShopify=false;
+  await loadAll(id);
+};
 
-async function loadAll(){
+async function loadAll(preferredStoreId=null){
   try{
-    const status=await invoke("getStatus");
-    state.store=status.store;state.integrations=status.integrations||[];state.runs=status.runs||[];
+    const saved=preferredStoreId||localStorage.getItem("pt_store_id")||state.store?.id||null;
+    const status=await invoke("getStatus",{store_id:saved});
+    state.store=status.store;state.stores=status.stores||[];state.integrations=status.integrations||[];state.runs=status.runs||[];
+    if(state.store?.id)localStorage.setItem("pt_store_id",state.store.id);
     $("brand-store").textContent=state.store?.name||"My Store";
+    renderStoreSwitcher();
     await loadData();render();
   }catch(err){toast(err.message,"bad")}
 }
+function renderStoreSwitcher(){
+  const sel=$("store-select");if(!sel)return;
+  sel.innerHTML=(state.stores||[]).map(s=>'<option value="'+esc(s.id)+'" '+(s.id===state.store?.id?"selected":"")+'>'+esc(s.name||s.shop_domain||"Store")+'</option>').join("");
+  if(!(state.stores||[]).length)sel.innerHTML='<option>No store</option>';
+}
+
 
 async function loadData(){
   const extendedDays=Math.max(state.range*2,30);
@@ -243,7 +258,7 @@ function renderCreatives(currency){
     const media=thumb?'<img src="'+esc(thumb)+'" loading="lazy" referrerpolicy="no-referrer" alt="">':'<div class="creative-placeholder">'+esc((x.media_type||x.format||"AD").toUpperCase())+'</div>';
     const strength=x.data_strength||"early";
     return '<article class="creative-card">'+
-      '<div class="creative-media">'+media+'<span class="provider">'+esc(x.provider||"unknown")+'</span></div>'+
+      '<div class="creative-media">'+media+'<span class="provider">'+providerIcon(x.provider||"unknown")+' '+esc(x.provider||"unknown")+'</span></div>'+
       '<div class="creative-body"><div class="creative-head"><div><b>'+esc(x.ad_name||"Unnamed creative")+'</b><small>'+esc(x.campaign_name||"")+'</small></div><span class="signal '+esc(x.recommendation||"watch")+'">'+esc(x.recommendation||"watch")+'</span></div>'+
       '<div class="decision-note"><b>'+esc(strength)+' data</b><span>'+esc(x.decision_reason||"Waiting for enough spend and orders.")+'</span></div>'+
       '<div class="creative-kpis"><div><span>Spend</span><b>'+money(x.spend,currency)+'</b></div><div><span>Orders</span><b>'+x.orders+'</b></div><div><span>Revenue</span><b>'+money(x.revenue,currency)+'</b></div><div><span>CPA</span><b>'+money(x.cpa,currency)+'</b></div><div><span>Break-even CPA</span><b>'+money(x.break_even_cpa||x.store_break_even_cpa,currency)+'</b></div><div><span>True ROAS</span><b>'+n(x.true_roas).toFixed(2)+'×</b></div><div><span>Profit</span><b class="'+(n(x.profit)>=0?"positive":"negative")+'">'+money(x.profit,currency)+'</b></div><div><span>Confidence</span><b>'+pct(x.attribution_confidence)+'</b></div></div>'+
@@ -381,6 +396,19 @@ function renderAlerts(s){
   else if(s.adSpend)alerts.push(["good","Blended advertising is above break-even",s.mer.toFixed(2)+"× MER vs "+s.breakEvenRoas.toFixed(2)+"× break-even ROAS."]);
   $("alerts").innerHTML=alerts.slice(0,5).map(a=>'<div class="alert '+a[0]+'"><i></i><div><b>'+esc(a[1])+'</b><p>'+esc(a[2])+'</p></div></div>').join("")||'<div class="empty">No alerts right now.</div>';
 }
+function providerIcon(provider){
+  const p=String(provider||"other").toLowerCase();
+  if(p==="meta"||p==="facebook")return '<i class="fa-brands fa-meta"></i>';
+  if(p==="google")return '<i class="fa-brands fa-google"></i>';
+  if(p==="tiktok")return '<i class="fa-brands fa-tiktok"></i>';
+  if(p==="shopify")return '<i class="fa-brands fa-shopify"></i>';
+  if(p==="microsoft")return '<i class="fa-brands fa-microsoft"></i>';
+  if(p==="reddit")return '<i class="fa-brands fa-reddit-alien"></i>';
+  if(p==="x"||p==="twitter")return '<i class="fa-brands fa-x-twitter"></i>';
+  if(p==="pinterest")return '<i class="fa-brands fa-pinterest"></i>';
+  if(p==="amazon")return '<i class="fa-brands fa-amazon"></i>';
+  return '<i class="fa-solid fa-bullhorn"></i>';
+}
 function platformAgg(){
   const map={};
   state.ads.forEach(a=>{const p=a.provider||"other";map[p]||={provider:p,spend:0,revenue:0,purchases:0,impressions:0,clicks:0};map[p].spend+=n(a.spend);map[p].revenue+=n(a.purchase_value);map[p].purchases+=n(a.purchases);map[p].impressions+=n(a.impressions);map[p].clicks+=n(a.clicks)});
@@ -388,7 +416,7 @@ function platformAgg(){
 }
 function renderPlatforms(){
   const arr=platformAgg();
-  $("platform-cards").innerHTML=arr.length?arr.map(p=>'<div class="platform-card"><div class="platform-title"><b>'+esc(p.provider)+'</b><span>'+money(p.spend)+' spend</span></div><div class="platform-value">'+(p.spend?p.revenue/p.spend:0).toFixed(2)+'×</div><div class="platform-sub"><span>reported ROAS</span><span>'+Math.round(p.purchases)+' purchases</span></div></div>').join(""):'<div class="empty">No ad platforms connected yet.</div>';
+  $("platform-cards").innerHTML=arr.length?arr.map(p=>'<div class="platform-card"><div class="platform-title"><b class="provider-name">'+providerIcon(p.provider)+' '+esc(p.provider)+'</b><span>'+money(p.spend)+' spend</span></div><div class="platform-value">'+(p.spend?p.revenue/p.spend:0).toFixed(2)+'×</div><div class="platform-sub"><span>reported ROAS</span><span>'+Math.round(p.purchases)+' purchases</span></div></div>').join(""):'<div class="empty">No ad platforms connected yet.</div>';
 }
 
 function adAgg(){
@@ -400,7 +428,7 @@ function signal(roas){return roas>=3?"scale":roas>=2?"hold":roas>=1.5?"watch":"k
 function renderTopAds(){
   const arr=(state.creatives||[]).filter(x=>n(x.spend)>0).sort((a,b)=>n(b.spend)-n(a.spend)).slice(0,8);
   if(arr.length){
-    $("top-ads-body").innerHTML=arr.map(a=>'<tr><td><b>'+esc(a.ad_name)+'</b><small>'+esc(a.data_strength||"early")+' data</small></td><td><span class="provider">'+esc(a.provider)+'</span></td><td>'+money(a.spend)+'</td><td>'+money(a.revenue)+'</td><td>'+n(a.true_roas).toFixed(2)+'×</td><td>'+Math.round(n(a.orders))+'</td><td><span class="signal '+esc(a.recommendation||"watch")+'" title="'+esc(a.decision_reason||"")+'">'+esc(a.recommendation||"watch")+'</span></td></tr>').join("");
+    $("top-ads-body").innerHTML=arr.map(a=>'<tr><td><b>'+esc(a.ad_name)+'</b><small>'+esc(a.data_strength||"early")+' data</small></td><td><span class="provider">'+providerIcon(a.provider)+' '+esc(a.provider)+'</span></td><td>'+money(a.spend)+'</td><td>'+money(a.revenue)+'</td><td>'+n(a.true_roas).toFixed(2)+'×</td><td>'+Math.round(n(a.orders))+'</td><td><span class="signal '+esc(a.recommendation||"watch")+'" title="'+esc(a.decision_reason||"")+'">'+esc(a.recommendation||"watch")+'</span></td></tr>').join("");
   }else{
     $("top-ads-body").innerHTML='<tr><td colspan="7" class="empty">No ad data yet.</td></tr>';
   }
@@ -440,23 +468,86 @@ function renderExpenses(c){
 function renderSettings(){
   const by={};state.integrations.forEach(x=>by[x.provider]=x);
   const sh=by.shopify,me=by.meta,go=by.google,tt=by.tiktok;
+  const connected=Boolean(sh);
   const trackerInstalled=Boolean(sh?.metadata?.tracker_installed);
-  $("shopify-status").textContent=sh?(trackerInstalled?"Connected + tracking":"Connected"):"Not connected";$("shopify-status").classList.toggle("good",!!sh);
-  if($("install-tracker")) $("install-tracker").textContent=trackerInstalled?"Tracker installed ✓":"Install first-party tracker automatically";
+  const permissionsOk=sh?.metadata?.permissions_ok;
+  const missing=sh?.metadata?.missing_scopes||[];
+
+  if($("setup-intro"))$("setup-intro").classList.toggle("hidden",connected);
+  if($("shopify-connected-summary"))$("shopify-connected-summary").classList.toggle("hidden",!connected);
+  if($("shopify-card"))$("shopify-card").classList.toggle("hidden",connected&&!state.editingShopify&&!state.addingStore);
+
+  $("shopify-status").textContent=connected?(permissionsOk===false?"Connected · needs permissions":(trackerInstalled?"Connected + tracking":"Connected")):"Not connected";
+  $("shopify-status").classList.toggle("good",connected&&permissionsOk!==false);
+
+  if(connected){
+    $("connected-store-name").textContent=state.store?.name||"Shopify store";
+    $("connected-store-domain").textContent=state.store?.shop_domain||sh.external_account_id||"";
+    $("connected-store-plan").textContent=state.store?.shopify_plan||"Detected on next sync";
+    const rate=n(state.store?.estimated_card_rate);
+    const flat=n(state.store?.estimated_card_flat_fee);
+    $("connected-store-fees").textContent=rate?(pct(rate)+" + "+money(flat)):"Actual Shopify fees";
+    $("connected-store-sync").textContent=sh.last_sync_at?new Date(sh.last_sync_at).toLocaleString():"Not synced yet";
+    $("connected-store-tracker").textContent=trackerInstalled?"Installed":"Not installed";
+
+    const warning=$("shopify-permission-warning");
+    if(permissionsOk===false||sh.last_error){
+      warning.classList.remove("hidden");
+      const detail=missing.length?("Missing: "+missing.join(", ")):(sh.last_error||"Shopify permissions need attention.");
+      warning.innerHTML='<i class="fa-solid fa-triangle-exclamation"></i><div><b>Connection needs permissions</b><span>'+esc(detail)+'</span><small>Open Repair connection after updating the app scopes in Shopify Dev Dashboard.</small></div>';
+    }else warning.classList.add("hidden");
+  }
+
+  if($("install-tracker"))$("install-tracker").innerHTML=trackerInstalled?'<i class="fa-solid fa-check"></i> Tracking installed':'<i class="fa-solid fa-crosshairs"></i> Install tracking';
+
   $("meta-status").textContent=me?"Connected":"Not connected";$("meta-status").classList.toggle("good",!!me);
   if($("google-status")){$("google-status").textContent=go?"Connected":"Not connected";$("google-status").classList.toggle("good",!!go)}
   if($("tiktok-status")){$("tiktok-status").textContent=tt?"Connected":"Not connected";$("tiktok-status").classList.toggle("good",!!tt)}
-  $("integration-list").innerHTML=state.integrations.length?state.integrations.map(x=>'<div class="integration-row"><div><b>'+esc(x.provider)+'</b><small>'+(x.last_sync_at?"Last synced "+new Date(x.last_sync_at).toLocaleString():"Connected · sync not run yet")+(x.last_error?'<br>'+esc(x.last_error):'')+'</small></div><span class="status-badge '+(x.last_error?"":"good")+'">'+(x.last_error?"Needs attention":"Connected")+'</span></div>').join(""):'<div class="empty">No API connections yet.</div>';
+
+  $("integration-list").innerHTML=state.integrations.length?state.integrations.map(x=>'<div class="integration-row"><div class="integration-name">'+providerIcon(x.provider)+'<div><b>'+esc(x.provider)+'</b><small>'+(x.last_sync_at?"Last synced "+new Date(x.last_sync_at).toLocaleString():"Connected · sync not run yet")+(x.last_error?'<br>'+esc(x.last_error):'')+'</small></div></div><span class="status-badge '+(x.last_error?"":"good")+'">'+(x.last_error?"Needs attention":"Connected")+'</span></div>').join(""):'<div class="empty">No API connections yet.</div>';
 }
 function renderHealth(){
+  const shopify=state.integrations.find(x=>x.provider==="shopify");
   const synced=state.integrations.some(x=>x.last_sync_at);
-  $("health-dot").classList.toggle("good",synced);
-  $("health-title").textContent=synced?"Data syncing":"Setup incomplete";
+  const hasError=state.integrations.some(x=>x.last_error);
+  $("health-dot").classList.toggle("good",synced&&!hasError);
+  $("health-title").textContent=hasError?"Connection needs attention":synced?"Data syncing":shopify?"Shopify connected":"Setup incomplete";
   const last=state.integrations.map(x=>x.last_sync_at).filter(Boolean).sort().pop();
-  $("health-sub").textContent=last?"Last sync "+new Date(last).toLocaleString():"Connect Shopify + ads";
+  $("health-sub").textContent=hasError?"Open Settings to repair":last?"Last sync "+new Date(last).toLocaleString():shopify?"Run your first sync":"Connect Shopify + ads";
 }
 
-$("shopify-form").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{const j=await invoke("saveShopify",Object.fromEntries(f));toast(j.message);await loadAll()}catch(err){toast(err.message,"bad")}};
+$("shopify-form").onsubmit=async e=>{
+  e.preventDefault();
+  const payload=Object.fromEntries(new FormData(e.target));
+  if(state.addingStore){payload.new_store=true;payload.store_id=null}
+  try{
+    const j=await invoke("saveShopify",payload);
+    if(j.store_id){localStorage.setItem("pt_store_id",j.store_id)}
+    state.addingStore=false;state.editingShopify=false;
+    toast(j.message,j.permissions_ok===false?"bad":"good");
+    await loadAll(j.store_id||state.store?.id);
+  }catch(err){toast(err.message,"bad")}
+};
+if($("repair-shopify"))$("repair-shopify").onclick=()=>{
+  state.editingShopify=true;state.addingStore=false;
+  $("shopify-card").classList.remove("hidden");
+  $("shopify-form").shop_domain.value=state.store?.shop_domain||"";
+  $("shopify-form").client_id.value=(state.integrations.find(x=>x.provider==="shopify")?.metadata?.client_id)||"";
+  $("shopify-form").client_secret.value="";
+  $("shopify-form").access_token.value="";
+  $("shopify-card").scrollIntoView({behavior:"smooth",block:"start"});
+};
+if($("add-store"))$("add-store").onclick=()=>{
+  state.addingStore=true;state.editingShopify=true;
+  $("shopify-card").classList.remove("hidden");
+  $("shopify-form").reset();
+  $("shopify-status").textContent="New store";
+  $("shopify-card").scrollIntoView({behavior:"smooth",block:"start"});
+};
+if($("cancel-shopify-edit"))$("cancel-shopify-edit").onclick=()=>{
+  state.addingStore=false;state.editingShopify=false;
+  renderSettings();
+};
 $("meta-form").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{const j=await invoke("saveMeta",Object.fromEntries(f));toast(j.message);await loadAll()}catch(err){toast(err.message,"bad")}};
 if($("google-form"))$("google-form").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{const j=await invoke("saveGoogle",Object.fromEntries(f));toast(j.message);await loadAll()}catch(err){toast(err.message,"bad")}};
 if($("tiktok-form"))$("tiktok-form").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{const j=await invoke("saveTikTok",Object.fromEntries(f));toast(j.message);await loadAll()}catch(err){toast(err.message,"bad")}};
