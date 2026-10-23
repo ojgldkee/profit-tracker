@@ -5,7 +5,7 @@ export async function GET(req:NextRequest){
   const code=req.nextUrl.searchParams.get("code")||"", state=req.nextUrl.searchParams.get("state")||"";
   if(!code||!state||state!==req.cookies.get("pt_meta_state")?.value) return NextResponse.json({error:"Invalid Meta OAuth callback."},{status:400});
   const redirect=(process.env.NEXT_PUBLIC_APP_URL||req.nextUrl.origin).replace(/\/$/,"")+"/api/integrations/meta/callback";
-  const url=new URL("https://graph.facebook.com/v23.0/oauth/access_token");
+  const version=process.env.META_API_VERSION||"v23.0";\n  const url=new URL(`https://graph.facebook.com/${version}/oauth/access_token`);
   url.searchParams.set("client_id",process.env.META_APP_ID||"");
   url.searchParams.set("client_secret",process.env.META_APP_SECRET||"");
   url.searchParams.set("redirect_uri",redirect);
