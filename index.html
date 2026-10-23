@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
   <meta name="theme-color" content="#090b0f"/>
   <title>Profit Tracker</title>
-  <link rel="stylesheet" href="./styles.css?v=4"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"/>
+  <link rel="stylesheet" href="./styles.css?v=5"/>
 </head>
 <body>
 <div id="toast"></div>
@@ -42,16 +43,16 @@
   <aside class="sidebar">
     <div class="brand"><div class="logo"><span>PT</span></div><div><b>Profit Tracker</b><small id="brand-store">My Store</small></div></div>
     <nav id="nav">
-      <button class="active" data-page="overview"><i>⌂</i><span>Overview</span></button>
-      <button data-page="profit"><i>↗</i><span>Profit</span></button>
-      <button data-page="ads"><i>◎</i><span>Ads</span></button>
-      <button data-page="creatives"><i>◉</i><span>Creatives</span></button>
-      <button data-page="customers"><i>♙</i><span>Customers</span></button>
-      <button data-page="subscriptions"><i>↻</i><span>Subscriptions</span></button>
-      <button data-page="orders"><i>≡</i><span>Orders</span></button>
-      <button data-page="products"><i>◇</i><span>Products</span></button>
-      <button data-page="expenses"><i>−</i><span>Expenses</span></button>
-      <button data-page="settings"><i>⚙</i><span>Settings</span></button>
+      <button class="active" data-page="overview"><i class="fa-solid fa-house"></i><span>Overview</span></button>
+      <button data-page="profit"><i class="fa-solid fa-chart-line"></i><span>Profit</span></button>
+      <button data-page="ads"><i class="fa-solid fa-bullhorn"></i><span>Ads</span></button>
+      <button data-page="creatives"><i class="fa-solid fa-photo-film"></i><span>Creatives</span></button>
+      <button data-page="customers"><i class="fa-solid fa-users"></i><span>Customers</span></button>
+      <button data-page="subscriptions"><i class="fa-solid fa-arrows-rotate"></i><span>Subscriptions</span></button>
+      <button data-page="orders"><i class="fa-solid fa-receipt"></i><span>Orders</span></button>
+      <button data-page="products"><i class="fa-solid fa-box"></i><span>Products</span></button>
+      <button data-page="expenses"><i class="fa-solid fa-wallet"></i><span>Expenses</span></button>
+      <button data-page="settings"><i class="fa-solid fa-gear"></i><span>Settings</span></button>
     </nav>
     <div class="sidebar-bottom">
       <div class="sync-health"><span id="health-dot"></span><div><b id="health-title">Not synced</b><small id="health-sub">Connect data sources</small></div></div>
@@ -63,6 +64,10 @@
     <header class="topbar">
       <div><p class="kicker" id="page-kicker">FINANCIAL TRUTH</p><h1 id="page-title">Overview</h1></div>
       <div class="top-actions">
+        <div class="store-switcher">
+          <i class="fa-brands fa-shopify"></i>
+          <select id="store-select" aria-label="Tracked store"></select>
+        </div>
         <select id="range-select">
           <option value="1">Today</option>
           <option value="7" selected>Last 7 days</option>
@@ -228,7 +233,7 @@
     </section>
 
     <section id="page-settings" class="page">
-      <div class="setup-intro card">
+      <div id="setup-intro" class="setup-intro card">
         <div>
           <p class="kicker">EASY SETUP</p>
           <h2>Connect your store in a few steps</h2>
@@ -239,10 +244,34 @@
         </div>
       </div>
 
+      <article id="shopify-connected-summary" class="card connected-store-card hidden">
+        <div class="connected-store-main">
+          <div class="platform-icon shopify brand-logo"><i class="fa-brands fa-shopify"></i></div>
+          <div>
+            <p class="kicker">SHOPIFY STORE</p>
+            <h2 id="connected-store-name">Store connected</h2>
+            <p id="connected-store-domain" class="muted"></p>
+          </div>
+        </div>
+        <div class="connected-store-facts">
+          <div><span>Plan</span><b id="connected-store-plan">—</b></div>
+          <div><span>Card fees</span><b id="connected-store-fees">—</b></div>
+          <div><span>Last sync</span><b id="connected-store-sync">Never</b></div>
+          <div><span>Tracking</span><b id="connected-store-tracker">Not installed</b></div>
+        </div>
+        <div id="shopify-permission-warning" class="permission-warning hidden"></div>
+        <div class="connected-store-actions">
+          <button id="sync-shopify" class="primary" type="button"><i class="fa-solid fa-rotate"></i> Sync now</button>
+          <button id="install-tracker" class="secondary" type="button"><i class="fa-solid fa-crosshairs"></i> Install tracking</button>
+          <button id="repair-shopify" class="secondary" type="button"><i class="fa-solid fa-screwdriver-wrench"></i> Repair connection</button>
+          <button id="add-store" class="secondary" type="button"><i class="fa-solid fa-plus"></i> Connect another store</button>
+        </div>
+      </article>
+
       <div class="settings-grid">
-        <article class="card integration-card featured">
+        <article id="shopify-card" class="card integration-card featured">
           <div class="integration-top">
-            <div class="platform-icon shopify">S</div>
+            <div class="platform-icon shopify brand-logo"><i class="fa-brands fa-shopify"></i></div>
             <div><p class="kicker">STEP 1 · COMMERCE</p><h2>Shopify</h2><p>Orders, refunds, product costs, payment fees, customers and subscriptions.</p></div>
             <span id="shopify-status" class="status-badge">Not connected</span>
           </div>
@@ -274,13 +303,12 @@
               <label>Legacy Admin API token<input name="access_token" type="password" placeholder="shpat_..."></label>
             </details>
             <button class="primary large" type="submit">Connect Shopify</button>
-            <button id="sync-shopify" class="secondary large" type="button">Sync Shopify data</button>
-            <button id="install-tracker" class="secondary large span2" type="button">Install first-party tracker automatically</button>
+            <button id="cancel-shopify-edit" class="secondary large" type="button">Cancel</button>
           </form>
         </article>
 
         <article class="card integration-card">
-          <div class="integration-top"><div class="platform-icon meta">M</div><div><p class="kicker">ADS</p><h2>Meta Ads</h2><p>Spend, purchases, campaigns, ad sets and creative performance.</p></div><span id="meta-status" class="status-badge">Not connected</span></div>
+          <div class="integration-top"><div class="platform-icon meta brand-logo"><i class="fa-brands fa-meta"></i></div><div><p class="kicker">ADS</p><h2>Meta Ads</h2><p>Spend, purchases, campaigns, ad sets and creative performance.</p></div><span id="meta-status" class="status-badge">Not connected</span></div>
           <form id="meta-form" class="form-grid">
             <label class="span2">Meta access token<input name="access_token" type="password" placeholder="Marketing API access token" required></label>
             <label class="span2">Ad account ID<input name="account_id" placeholder="act_123... (optional if auto-discovered)"></label>
@@ -290,7 +318,7 @@
         </article>
 
         <article class="card integration-card">
-          <div class="integration-top"><div class="platform-icon google">G</div><div><p class="kicker">ADS</p><h2>Google Ads</h2><p>Native Google Ads API connection using the current v26 reporting API.</p></div><span id="google-status" class="status-badge">Not connected</span></div>
+          <div class="integration-top"><div class="platform-icon google brand-logo"><i class="fa-brands fa-google"></i></div><div><p class="kicker">ADS</p><h2>Google Ads</h2><p>Native Google Ads API connection using the current v26 reporting API.</p></div><span id="google-status" class="status-badge">Not connected</span></div>
           <form id="google-form" class="form-grid">
             <label class="span2">OAuth access token<input name="access_token" type="password" placeholder="Google OAuth access token" required></label>
             <label>Developer token<input name="developer_token" type="password" placeholder="Google Ads developer token" required></label>
@@ -302,7 +330,7 @@
         </article>
 
         <article class="card integration-card">
-          <div class="integration-top"><div class="platform-icon tiktok">T</div><div><p class="kicker">ADS</p><h2>TikTok Ads</h2><p>Native TikTok API for Business reporting connection.</p></div><span id="tiktok-status" class="status-badge">Not connected</span></div>
+          <div class="integration-top"><div class="platform-icon tiktok brand-logo"><i class="fa-brands fa-tiktok"></i></div><div><p class="kicker">ADS</p><h2>TikTok Ads</h2><p>Native TikTok API for Business reporting connection.</p></div><span id="tiktok-status" class="status-badge">Not connected</span></div>
           <form id="tiktok-form" class="form-grid">
             <label class="span2">TikTok access token<input name="access_token" type="password" placeholder="TikTok advertiser access token" required></label>
             <label class="span2">Advertiser ID<input name="advertiser_id" placeholder="TikTok advertiser ID" required></label>
@@ -332,6 +360,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js"></script>
-<script src="./app.js?v=4"></script>
+<script src="./app.js?v=5"></script>
 </body>
 </html>
