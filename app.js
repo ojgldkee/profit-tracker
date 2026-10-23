@@ -3,7 +3,7 @@ const SUPABASE_KEY="sb_publishable_Ow4gfh354q6hFXNtkEVIqg_VGUEbvqL";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const API=SUPABASE_URL+"/functions/v1/profit-api";
 
-const state={session:null,store:null,daily:[],ads:[],orders:[],products:[],expenses:[],integrations:[],runs:[],range:7,provider:"all",authMode:"signin"};
+const state={session:null,store:null,daily:[],dailyAll:[],previousDaily:[],ads:[],orders:[],products:[],expenses:[],creatives:[],customerDaily:[],customerSummary:null,subscriptions:[],subscriptionSummary:null,attributionSummary:[],integrations:[],runs:[],range:7,provider:"all",authMode:"signin"};
 
 const $=id=>document.getElementById(id);
 const money=(v,c="USD")=>new Intl.NumberFormat("en-US",{style:"currency",currency:c,maximumFractionDigits:2}).format(Number(v||0));
@@ -66,7 +66,7 @@ function openPage(page){
   document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("active",b.dataset.page===page));
   document.querySelectorAll(".page").forEach(p=>p.classList.toggle("active",p.id==="page-"+page));
   $("page-title").textContent=page[0].toUpperCase()+page.slice(1);
-  $("page-kicker").textContent=({overview:"FINANCIAL TRUTH",profit:"CONTRIBUTION ECONOMICS",ads:"MEDIA PERFORMANCE",orders:"ORDER ECONOMICS",products:"PRODUCT ECONOMICS",expenses:"COST CONTROL",settings:"DATA CONNECTIONS"})[page]||"PROFIT TRACKER";
+  $("page-kicker").textContent=({overview:"FINANCIAL TRUTH",profit:"CONTRIBUTION ECONOMICS",ads:"MEDIA PERFORMANCE",creatives:"CREATIVE ECONOMICS",customers:"CUSTOMER ECONOMICS",subscriptions:"SUBSCRIPTION ECONOMICS",orders:"ORDER ECONOMICS",products:"PRODUCT ECONOMICS",expenses:"COST CONTROL",settings:"DATA CONNECTIONS"})[page]||"PROFIT TRACKER";
 }
 
 $("range-select").onchange=async e=>{state.range=Number(e.target.value);await loadData();render()};
@@ -82,26 +82,44 @@ async function loadAll(){
 }
 
 async function loadData(){
-  const start=isoStart(state.range);
+  const extendedDays=Math.max(state.range*2,15);
+  const extendedStart=isoStart(extendedDays);
+  const currentStart=isoStart(state.range);
   const storeId=state.store?.id;if(!storeId)return;
-  const [daily,ads,orders,products,expenses]=await Promise.all([
-    sb.from("daily_profit").select("*").eq("store_id",storeId).gte("day",start).order("day"),
-    sb.from("ad_daily").select("*").eq("store_id",storeId).gte("day",start).order("spend",{ascending:false}),
-    sb.from("order_profitability").select("*").eq("store_id",storeId).gte("created_at",start+"T00:00:00Z").order("created_at",{ascending:false}).limit(300),
+  const [dailyAll,ads,orders,products,expenses,creatives,customerDaily,customerSummary,subscriptions,subscriptionSummary,attributionSummary]=await Promise.all([
+    sb.from("daily_profit").select("*").eq("store_id",storeId).gte("day",extendedStart).order("day"),
+    sb.from("ad_daily").select("*").eq("store_id",storeId).gte("day",currentStart).order("spend",{ascending:false}),
+    sb.from("order_profitability").select("*").eq("store_id",storeId).gte("created_at",currentStart+"T00:00:00Z").order("created_at",{ascending:false}).limit(500),
     sb.from("product_profitability").select("*").eq("store_id",storeId).order("gross_contribution",{ascending:false}).limit(100),
-    sb.from("expenses").select("*").eq("store_id",storeId).gte("day",start).order("day",{ascending:false})
+    sb.from("expenses").select("*").eq("store_id",storeId).gte("day",currentStart).order("day",{ascending:false}),
+    sb.from("creative_profitability").select("*").eq("store_id",storeId).order("profit",{ascending:false}).limit(300),
+    sb.from("customer_economics_daily").select("*").eq("store_id",storeId).gte("day",extendedStart).order("day"),
+    sb.from("customer_summary").select("*").eq("store_id",storeId).maybeSingle(),
+    sb.from("subscription_contract_economics").select("*").eq("store_id",storeId).order("ltv_contribution_profit",{ascending:false}).limit(300),
+    sb.from("subscription_summary").select("*").eq("store_id",storeId).maybeSingle(),
+    sb.from("attribution_summary").select("*").eq("store_id",storeId)
   ]);
-  for(const x of [daily,ads,orders,products,expenses])if(x.error)console.warn(x.error);
-  state.daily=daily.data||[];state.ads=ads.data||[];state.orders=orders.data||[];state.products=products.data||[];state.expenses=expenses.data||[];
+  for(const x of [dailyAll,ads,orders,products,expenses,creatives,customerDaily,customerSummary,subscriptions,subscriptionSummary,attributionSummary])if(x.error)console.warn(x.error);
+  state.dailyAll=dailyAll.data||[];
+  state.daily=state.dailyAll.filter(x=>x.day>=currentStart);
+  const prevEnd=new Date(new Date(currentStart+"T00:00:00Z").getTime()-86400000).toISOString().slice(0,10);
+  const prevStart=new Date(new Date(currentStart+"T00:00:00Z").getTime()-state.range*86400000).toISOString().slice(0,10);
+  state.previousDaily=state.dailyAll.filter(x=>x.day>=prevStart&&x.day<=prevEnd);
+  state.ads=ads.data||[];state.orders=orders.data||[];state.products=products.data||[];state.expenses=expenses.data||[];
+  state.creatives=creatives.data||[];
+  state.customerDaily=(customerDaily.data||[]).filter(x=>x.day>=currentStart);
+  state.customerSummary=customerSummary.data||null;
+  state.subscriptions=subscriptions.data||[];
+  state.subscriptionSummary=subscriptionSummary.data||null;
+  state.attributionSummary=attributionSummary.data||[];
 }
-
-function summary(){
-  const d=state.daily;
+function summary(rows=state.daily){
+  const d=rows;
   const gross=sum(d,"gross_sales"),net=sum(d,"net_revenue"),orders=sum(d,"orders"),adSpend=sum(d,"ad_spend"),cogs=sum(d,"cogs"),fulfillment=sum(d,"fulfillment_cost"),fees=sum(d,"payment_fees"),variable=sum(d,"variable_costs"),refunds=sum(d,"refunds"),expenses=sum(d,"expenses"),preAd=sum(d,"pre_ad_contribution"),profit=sum(d,"contribution_profit"),reported=sum(d,"platform_purchase_value");
   return {gross,net,orders,adSpend,cogs,fulfillment,fees,variable,refunds,expenses,preAd,profit,reported,margin:net?profit/net:0,mer:adSpend?net/adSpend:0,platformRoas:adSpend?reported/adSpend:0,aov:orders?net/orders:0,cpa:orders?adSpend/orders:0,profitOrder:orders?profit/orders:0,breakEvenRoas:preAd>0?net/preAd:0};
 }
 
-function metric(label,value,sub="",tone=""){return '<div class="metric '+tone+'"><span>'+esc(label)+'</span><b>'+esc(value)+'</b><small>'+esc(sub)+'</small></div>'}
+function metric(label,value,sub="",tone=""){return '<button type="button" class="metric metric-click '+tone+'" data-metric="'+esc(label)+'"><span>'+esc(label)+'</span><b>'+esc(value)+'</b><small>'+esc(sub)+'</small></button>'}
 
 function render(){
   const s=summary(),currency=state.store?.currency||"USD";
@@ -112,13 +130,14 @@ function render(){
   $("profit-health").textContent=health;$("profit-health").className=s.profit<0?"negative":"";
   $("setup-banner").classList.toggle("hidden",state.orders.length>0||state.integrations.length>0);
 
+  renderComparisons(currency);
   $("overview-metrics").innerHTML=[
     metric("Net revenue",money(s.net,currency),s.orders+" orders"),
     metric("Ad spend",money(s.adSpend,currency),money(s.cpa,currency)+" blended CPA"),
-    metric("Blended MER",s.mer.toFixed(2)+"×","Shopify revenue ÷ ad spend"),
-    metric("Reported ROAS",s.platformRoas.toFixed(2)+"×","Across ad platforms"),
+    metric("Blended MER",s.mer.toFixed(2)+"×","Shopify revenue ÷ all ad spend"),
+    metric("Reported ROAS",s.platformRoas.toFixed(2)+"×","Platform-reported attribution"),
     metric("Break-even ROAS",s.breakEvenRoas.toFixed(2)+"×",s.mer>=s.breakEvenRoas?"Above break-even":"Below break-even",s.mer>=s.breakEvenRoas?"good":"bad"),
-    metric("COGS",money(s.cogs,currency),s.net?(s.cogs/s.net*100).toFixed(1)+"% of revenue":"0%")
+    metric("AOV",money(s.aov,currency),pct(s.margin)+" contribution margin")
   ].join("");
 
   renderTrend();
@@ -127,11 +146,137 @@ function render(){
   renderTopAds();
   renderProfit(s,currency);
   renderAds();
+  renderCreatives(currency);
+  renderCustomers(currency);
+  renderSubscriptions(currency);
   renderOrders(currency);
   renderProducts(currency);
   renderExpenses(currency);
   renderSettings();
   renderHealth();
+  attachMetricExplainers();
+}
+function delta(current,previous){
+  if(!previous)return current?100:0;
+  return ((current-previous)/Math.abs(previous))*100;
+}
+function deltaText(current,previous){
+  const d=delta(current,previous);
+  if(!isFinite(d))return "—";
+  return (d>=0?"+":"")+d.toFixed(1)+"%";
+}
+function renderComparisons(currency){
+  const rows=[...state.dailyAll].sort((a,b)=>a.day.localeCompare(b.day));
+  const byDay=Object.fromEntries(rows.map(x=>[x.day,x]));
+  const today=new Date().toISOString().slice(0,10);
+  const yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10);
+  const lastWeek=new Date(Date.now()-7*86400000).toISOString().slice(0,10);
+  const t=summary(byDay[today]?[byDay[today]]:[]);
+  const y=summary(byDay[yesterday]?[byDay[yesterday]]:[]);
+  const lw=summary(byDay[lastWeek]?[byDay[lastWeek]]:[]);
+  const curr7=summary(rows.filter(x=>x.day>=isoStart(7)));
+  const prev7Start=new Date(Date.now()-13*86400000).toISOString().slice(0,10);
+  const prev7End=new Date(Date.now()-7*86400000).toISOString().slice(0,10);
+  const prev7=summary(rows.filter(x=>x.day>=prev7Start&&x.day<=prev7End));
+  $("comparison-strip").innerHTML=[
+    '<div class="comparison"><span>Today vs yesterday</span><b class="'+(t.profit>=y.profit?"positive":"negative")+'">'+deltaText(t.profit,y.profit)+' profit</b><small>'+money(t.profit,currency)+' today</small></div>',
+    '<div class="comparison"><span>Today vs same weekday last week</span><b class="'+(t.net>=lw.net?"positive":"negative")+'">'+deltaText(t.net,lw.net)+' revenue</b><small>'+money(t.net,currency)+' today</small></div>',
+    '<div class="comparison"><span>Last 7 vs previous 7</span><b class="'+(curr7.profit>=prev7.profit?"positive":"negative")+'">'+deltaText(curr7.profit,prev7.profit)+' profit</b><small>'+deltaText(curr7.net,prev7.net)+' revenue</small></div>'
+  ].join("");
+}
+
+const metricInfo={
+  "Net revenue":{formula:"Gross sales − discounts − refunds + shipping revenue.",sources:["Shopify orders","Shopify refunds","Shipping collected"]},
+  "Ad spend":{formula:"Sum of spend across every connected/imported ad platform.",sources:["Meta Ads","Google/TikTok/etc imports or APIs"]},
+  "Blended MER":{formula:"Shopify net revenue ÷ total ad spend. This does not depend on platform attribution.",sources:["Shopify financial ledger","All advertising platforms"]},
+  "Reported ROAS":{formula:"Platform-reported purchase value ÷ platform spend. Useful directionally, but not treated as financial truth.",sources:["Meta/Google/TikTok reported attribution"]},
+  "Break-even ROAS":{formula:"Net revenue ÷ pre-ad contribution. It estimates the ROAS required for contribution profit to reach zero.",sources:["Shopify revenue","COGS","Fulfillment","Payment fees","Variable costs"]},
+  "AOV":{formula:"Net revenue ÷ orders.",sources:["Shopify orders"]},
+  "True profit":{formula:"Net revenue − COGS − fulfillment − payment fees − variable costs − ad spend − operating expenses.",sources:["Shopify","Ad platforms","Profit Tracker cost rules"]},
+  "Margin":{formula:"True contribution profit ÷ net revenue.",sources:["Profit Tracker contribution ledger"]},
+  "Spend":{formula:"Total advertising spend in the selected period.",sources:["Ad platform ledger"]},
+  "Reported revenue":{formula:"Purchase/conversion value reported by the ad platform.",sources:["Ad platform attribution"]},
+  "Reported CPA":{formula:"Ad spend ÷ platform-reported purchases.",sources:["Ad platform ledger"]},
+  "CPC":{formula:"Ad spend ÷ clicks.",sources:["Ad platform ledger"]},
+  "Orders":{formula:"Count of Shopify orders in the selected period.",sources:["Shopify"]},
+  "Revenue":{formula:"Net Shopify revenue in the selected period.",sources:["Shopify"]},
+  "Blended profit":{formula:"Order pre-ad contribution minus blended share of that day's ad spend.",sources:["Shopify","All ad platforms"]},
+  "COGS":{formula:"Quantity × Shopify variant unit cost or configured override.",sources:["Shopify inventory cost","Profit Tracker override"]},
+  "Payment fees":{formula:"Actual transaction fees reported on Shopify transactions when available.",sources:["Shopify transactions"]},
+  "Profit / order":{formula:"Total blended contribution profit ÷ order count.",sources:["Profit Tracker order ledger"]}
+};
+function attachMetricExplainers(){
+  document.querySelectorAll(".metric-click").forEach(el=>el.onclick=()=>{
+    const label=el.dataset.metric||"Metric",info=metricInfo[label]||{formula:"Calculated from the live Profit Tracker ledger.",sources:["Profit Tracker"]};
+    $("metric-drawer-title").textContent=label;
+    $("metric-drawer-value").textContent=el.querySelector("b")?.textContent||"";
+    $("metric-drawer-formula").textContent=info.formula;
+    $("metric-drawer-sources").innerHTML='<b>Data sources</b>'+info.sources.map(x=>'<span>'+esc(x)+'</span>').join("");
+    $("metric-drawer").classList.remove("hidden");
+  });
+}
+$("metric-drawer-close").onclick=()=>$("metric-drawer").classList.add("hidden");
+
+function renderCreatives(currency){
+  const arr=state.creatives||[];
+  const spend=sum(arr,"spend"),orders=sum(arr,"orders"),revenue=sum(arr,"revenue"),profit=sum(arr,"profit");
+  $("creative-metrics").innerHTML=[
+    metric("Spend",money(spend,currency),arr.length+" creatives"),
+    metric("Orders",Math.round(orders).toString(),"Shopify-attributed"),
+    metric("Revenue",money(revenue,currency),"Attributed Shopify revenue"),
+    metric("True profit",money(profit,currency),"After creative spend",profit>=0?"good":"bad"),
+    metric("Margin",pct(revenue?profit/revenue:0),"Creative contribution margin"),
+    metric("CPA",money(orders?spend/orders:0,currency),"Spend ÷ attributed orders")
+  ].join("");
+  $("creative-grid").innerHTML=arr.length?arr.map(x=>{
+    const thumb=x.thumbnail_url||x.media_url||"";
+    const media=thumb?'<img src="'+esc(thumb)+'" loading="lazy" referrerpolicy="no-referrer" alt="">':'<div class="creative-placeholder">'+esc((x.media_type||x.format||"AD").toUpperCase())+'</div>';
+    return '<article class="creative-card">'+
+      '<div class="creative-media">'+media+'<span class="provider">'+esc(x.provider||"unknown")+'</span></div>'+
+      '<div class="creative-body"><div class="creative-head"><div><b>'+esc(x.ad_name||"Unnamed creative")+'</b><small>'+esc(x.campaign_name||"")+'</small></div><span class="signal '+esc(x.recommendation||"watch")+'">'+esc(x.recommendation||"watch")+'</span></div>'+
+      '<div class="creative-kpis"><div><span>Spend</span><b>'+money(x.spend,currency)+'</b></div><div><span>Orders</span><b>'+x.orders+'</b></div><div><span>Revenue</span><b>'+money(x.revenue,currency)+'</b></div><div><span>CPA</span><b>'+money(x.cpa,currency)+'</b></div><div><span>True ROAS</span><b>'+n(x.true_roas).toFixed(2)+'×</b></div><div><span>Profit</span><b class="'+(n(x.profit)>=0?"positive":"negative")+'">'+money(x.profit,currency)+'</b></div><div><span>Margin</span><b>'+pct(x.profit_margin)+'</b></div><div><span>Confidence</span><b>'+pct(x.attribution_confidence)+'</b></div></div>'+
+      '<div class="creative-tags"><span>Hook: '+esc(x.hook||"Not tagged")+'</span><span>Angle: '+esc(x.angle||"Not tagged")+'</span><span>Format: '+esc(x.format||x.media_type||"Unknown")+'</span><span>'+esc(String(x.days_running||1))+' days running</span></div>'+
+      '</div></article>';
+  }).join(""):'<div class="empty">Sync ad data and Shopify attribution to populate creative profit.</div>';
+
+  const coverage=Object.fromEntries((state.attributionSummary||[]).map(x=>[x.model,x]));
+  const det=coverage.deterministic||{},blend=coverage.blended||{},modeled=coverage.modeled||{};
+  $("attribution-coverage").innerHTML=[
+    '<div class="coverage"><span>Deterministic orders</span><b>'+n(det.attributed_orders)+'</b><small>'+pct(det.avg_confidence||0)+' avg confidence</small></div>',
+    '<div class="coverage"><span>First-party session matches</span><b>'+n(det.first_party_session_matches)+'</b><small>Session/cart evidence</small></div>',
+    '<div class="coverage"><span>Modeled orders</span><b>'+n(modeled.attributed_orders)+'</b><small>'+pct(modeled.avg_confidence||0)+' avg confidence</small></div>',
+    '<div class="coverage"><span>Blended coverage</span><b>'+n(blend.attributed_orders)+'</b><small>'+money(blend.attributed_revenue||0,currency)+' revenue mapped</small></div>'
+  ].join("");
+}
+
+function renderCustomers(currency){
+  const rows=state.customerDaily||[],cs=state.customerSummary||{};
+  const newOrders=sum(rows,"new_orders"),retOrders=sum(rows,"returning_orders"),newRev=sum(rows,"new_revenue"),retRev=sum(rows,"returning_revenue"),adSpend=sum(rows,"ad_spend"),newProfit=sum(rows,"new_customer_profit");
+  const newCpa=newOrders?adSpend/newOrders:0,newRoas=adSpend?newRev/adSpend:0,newMargin=newRev?newProfit/newRev:0;
+  $("customer-metrics").innerHTML=[
+    metric("New customer CPA",money(newCpa,currency),"All spend ÷ new orders"),
+    metric("Returning revenue",money(retRev,currency),retOrders+" returning orders"),
+    metric("New customer profit",money(newProfit,currency),"After acquisition spend",newProfit>=0?"good":"bad"),
+    metric("Repeat purchase rate",pct(cs.repeat_purchase_rate||0),n(cs.repeat_customers)+" repeat customers"),
+    metric("New customer ROAS",newRoas.toFixed(2)+"×","New-customer revenue ÷ ad spend"),
+    metric("New customer margin",pct(newMargin),"After acquisition spend")
+  ].join("");
+  $("new-customer-panel").innerHTML='<div class="customer-big">'+money(newProfit,currency)+'</div><p class="muted">New-customer contribution profit after all advertising spend.</p><div class="mini-grid"><div class="mini-stat"><span>New orders</span><b>'+newOrders+'</b></div><div class="mini-stat"><span>CPA</span><b>'+money(newCpa,currency)+'</b></div><div class="mini-stat"><span>Revenue</span><b>'+money(newRev,currency)+'</b></div><div class="mini-stat"><span>ROAS</span><b>'+newRoas.toFixed(2)+'×</b></div></div>';
+  $("returning-customer-panel").innerHTML='<div class="customer-big">'+money(retRev,currency)+'</div><p class="muted">Revenue generated by customers after their first order.</p><div class="mini-grid"><div class="mini-stat"><span>Returning orders</span><b>'+retOrders+'</b></div><div class="mini-stat"><span>Repeat rate</span><b>'+pct(cs.repeat_purchase_rate||0)+'</b></div><div class="mini-stat"><span>Avg LTV</span><b>'+money(cs.avg_customer_ltv||0,currency)+'</b></div><div class="mini-stat"><span>Orders/customer</span><b>'+n(cs.avg_orders_per_customer).toFixed(2)+'</b></div></div>';
+  $("customer-table").innerHTML='<table><thead><tr><th>Date</th><th>New orders</th><th>Returning orders</th><th>New revenue</th><th>Returning revenue</th><th>New CPA</th><th>New profit</th></tr></thead><tbody>'+rows.map(x=>'<tr><td>'+esc(x.day)+'</td><td>'+x.new_orders+'</td><td>'+x.returning_orders+'</td><td>'+money(x.new_revenue,currency)+'</td><td>'+money(x.returning_revenue,currency)+'</td><td>'+money(x.blended_new_customer_cpa,currency)+'</td><td class="'+(n(x.new_customer_profit)>=0?"positive":"negative")+'">'+money(x.new_customer_profit,currency)+'</td></tr>').join("")+'</tbody></table>';
+}
+
+function renderSubscriptions(currency){
+  const ss=state.subscriptionSummary||{},arr=state.subscriptions||[];
+  $("subscription-metrics").innerHTML=[
+    metric("Subscriptions",String(n(ss.subscriptions)),"Detected Shopify selling-plan cohorts"),
+    metric("Rebill revenue",money(ss.rebill_revenue||0,currency),"Revenue after first order"),
+    metric("Churn",pct(ss.churn_rate||0),n(ss.churned_subscriptions)+" churned"),
+    metric("LTV",money(ss.avg_ltv||0,currency),"Average subscription revenue"),
+    metric("30-day profit",money(ss.avg_contribution_30d||0,currency),"Average cohort contribution"),
+    metric("CAC payback",ss.avg_cac_payback_days==null?"—":Math.round(n(ss.avg_cac_payback_days))+" days","Average payback")
+  ].join("");
+  $("subscriptions-body").innerHTML=arr.length?arr.map(x=>'<tr><td><b>'+esc(String(x.subscription_contract_id).split("|").slice(-1)[0])+'</b><small>'+new Date(x.first_order_at).toLocaleDateString()+'</small></td><td>'+x.orders+'</td><td>'+x.rebill_orders+'</td><td>'+money(x.first_order_profit,currency)+'</td><td>'+money(x.rebill_revenue,currency)+'</td><td>'+money(x.ltv_revenue,currency)+'</td><td>'+money(x.contribution_30d,currency)+'</td><td>'+money(x.contribution_60d,currency)+'</td><td>'+money(x.contribution_90d,currency)+'</td><td>'+(x.cac_payback_days==null?"—":x.cac_payback_days+"d")+'</td></tr>').join(""):'<tr><td colspan="10" class="empty">Sync Shopify to detect subscription orders and rebills.</td></tr>';
 }
 
 function renderTrend(){
