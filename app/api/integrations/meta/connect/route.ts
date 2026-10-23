@@ -6,7 +6,8 @@ export async function GET(){
   if(!appId||!appUrl) return NextResponse.json({error:"Meta app credentials are not configured."},{status:503});
   const state=crypto.randomBytes(20).toString("hex");
   const redirect=appUrl.replace(/\/$/,"")+"/api/integrations/meta/callback";
-  const version=process.env.META_API_VERSION||"v23.0";\n  const url=new URL(`https://www.facebook.com/${version}/dialog/oauth`);
+  const version=process.env.META_API_VERSION||"v23.0";
+  const url=new URL(`https://www.facebook.com/${version}/dialog/oauth`);
   url.searchParams.set("client_id",appId);
   url.searchParams.set("redirect_uri",redirect);
   url.searchParams.set("scope",process.env.META_SCOPES||"ads_read,business_management");
