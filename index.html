@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
   <meta name="theme-color" content="#090b0f"/>
   <title>Profit Tracker</title>
-  <link rel="stylesheet" href="./styles.css?v=2"/>
+  <link rel="stylesheet" href="./styles.css?v=3"/>
 </head>
 <body>
 <div id="toast"></div>
@@ -215,6 +215,7 @@
             <label>Admin API token<input name="access_token" type="password" placeholder="shpat_..." required></label>
             <button class="primary" type="submit">Save Shopify</button>
             <button id="sync-shopify" class="secondary" type="button">Sync Shopify now</button>
+            <button id="install-tracker" class="secondary" type="button">Install first-party tracker</button>
           </form>
         </article>
 
@@ -249,6 +250,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js"></script>
-<script src="./app.js?v=2"></script>
+<script src="./app.js?v=3"></script>
 </body>
 </html>
