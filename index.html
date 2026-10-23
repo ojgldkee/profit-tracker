@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#090b0f"/>
   <title>Profit Tracker</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"/>
-  <link rel="stylesheet" href="./styles.css?v=6"/>
+  <link rel="stylesheet" href="./styles.css?v=7"/>
 </head>
 <body>
 <div id="toast"></div>
@@ -263,7 +263,9 @@
         <div class="connected-store-actions">
           <button id="sync-shopify" class="primary" type="button"><i class="fa-solid fa-rotate"></i> Sync now</button>
           <button id="install-tracker" class="secondary" type="button"><i class="fa-solid fa-crosshairs"></i> Install tracking</button>
-          <button id="repair-shopify" class="secondary" type="button"><i class="fa-solid fa-screwdriver-wrench"></i> Repair connection</button>
+          <button id="repair-shopify" class="secondary" type="button"><i class="fa-solid fa-rotate"></i> Re-check permissions</button>
+          <a class="secondary button-link" href="https://dev.shopify.com/dashboard" target="_blank" rel="noopener"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open Shopify Dev Dashboard</a>
+          <button id="edit-shopify" class="secondary subtle" type="button"><i class="fa-solid fa-key"></i> Change credentials</button>
           <button id="add-store" class="secondary" type="button"><i class="fa-solid fa-plus"></i> Connect another store</button>
         </div>
       </article>
@@ -361,6 +363,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js"></script>
-<script src="./app.js?v=6"></script>
+<script src="./app.js?v=7"></script>
 </body>
 </html>
