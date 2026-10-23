@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+  <meta name="theme-color" content="#090b0f"/>
+  <title>Profit Tracker</title>
+  <link rel="stylesheet" href="./styles.css?v=1"/>
+</head>
+<body>
+<div id="toast"></div>
+
+<div id="auth-screen" class="auth-screen">
+  <div class="auth-card">
+    <div class="logo big"><span>PT</span></div>
+    <p class="kicker">PROFIT TRACKER</p>
+    <h1>Know what you actually made.</h1>
+    <p class="muted">Revenue is not profit. ROAS is not profit. Profit Tracker reconciles orders, COGS, fees, fulfillment, refunds, expenses, and ad spend.</p>
+    <div class="auth-tabs">
+      <button class="auth-tab active" data-auth="signin">Sign in</button>
+      <button class="auth-tab" data-auth="signup">Create account</button>
+    </div>
+    <form id="auth-form">
+      <input id="auth-email" type="email" placeholder="Email" required/>
+      <input id="auth-password" type="password" placeholder="Password" minlength="6" required/>
+      <input id="auth-store" class="signup-only hidden" type="text" placeholder="Store name (optional)"/>
+      <button class="primary full" type="submit">Sign in</button>
+    </form>
+    <p id="auth-msg" class="auth-msg"></p>
+  </div>
+</div>
+
+<div id="app" class="app hidden">
+  <aside class="sidebar">
+    <div class="brand"><div class="logo"><span>PT</span></div><div><b>Profit Tracker</b><small id="brand-store">My Store</small></div></div>
+    <nav id="nav">
+      <button class="active" data-page="overview"><i>⌂</i><span>Overview</span></button>
+      <button data-page="profit"><i>↗</i><span>Profit</span></button>
+      <button data-page="ads"><i>◎</i><span>Ads</span></button>
+      <button data-page="orders"><i>≡</i><span>Orders</span></button>
+      <button data-page="products"><i>◇</i><span>Products</span></button>
+      <button data-page="expenses"><i>−</i><span>Expenses</span></button>
+      <button data-page="settings"><i>⚙</i><span>Settings</span></button>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="sync-health"><span id="health-dot"></span><div><b id="health-title">Not synced</b><small id="health-sub">Connect data sources</small></div></div>
+      <button id="signout-btn" class="quiet">Sign out</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div><p class="kicker" id="page-kicker">FINANCIAL TRUTH</p><h1 id="page-title">Overview</h1></div>
+      <div class="top-actions">
+        <select id="range-select">
+          <option value="1">Today</option>
+          <option value="7" selected>Last 7 days</option>
+          <option value="14">Last 14 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+        <button id="refresh-btn" class="secondary">Refresh</button>
+      </div>
+    </header>
+
+    <section id="page-overview" class="page active">
+      <div id="setup-banner" class="setup-banner hidden">
+        <div><b>Finish setup to unlock live profit</b><span>Connect Shopify for orders and at least one ad source for spend.</span></div>
+        <button data-jump="settings" class="primary small">Connect sources</button>
+      </div>
+
+      <div class="hero">
+        <div>
+          <p class="label">TRUE CONTRIBUTION PROFIT</p>
+          <div class="hero-value" id="hero-profit">$0.00</div>
+          <div class="hero-sub"><span id="hero-margin">0.0% margin</span><span>•</span><span id="hero-profit-order">$0.00 / order</span></div>
+        </div>
+        <div class="profit-health">
+          <span>Profit health</span>
+          <b id="profit-health">—</b>
+          <small>after COGS, fulfillment, fees, expenses & ads</small>
+        </div>
+      </div>
+
+      <div class="metric-grid" id="overview-metrics"></div>
+
+      <div class="grid2">
+        <article class="card chart-card">
+          <div class="card-head"><div><p class="kicker">TREND</p><h2>Revenue vs profit</h2></div><div class="legend"><span class="rev"></span>Revenue <span class="prof"></span>Profit <span class="spend"></span>Ad spend</div></div>
+          <div id="trend-chart" class="trend-chart"></div>
+        </article>
+        <article class="card">
+          <div class="card-head"><div><p class="kicker">DECISION ENGINE</p><h2>What needs attention</h2></div></div>
+          <div id="alerts" class="alerts"></div>
+        </article>
+      </div>
+
+      <article class="card">
+        <div class="card-head"><div><p class="kicker">CHANNEL PROFIT SIGNAL</p><h2>Ad platforms</h2></div><button class="link-btn" data-jump="ads">Open ads →</button></div>
+        <div id="platform-cards" class="platform-cards"></div>
+      </article>
+
+      <article class="card">
+        <div class="card-head"><div><p class="kicker">CREATIVE PROFIT</p><h2>Ads ranked by financial impact</h2></div></div>
+        <div class="table-wrap"><table><thead><tr><th>Creative</th><th>Platform</th><th>Spend</th><th>Reported revenue</th><th>ROAS</th><th>Purchases</th><th>Signal</th></tr></thead><tbody id="top-ads-body"></tbody></table></div>
+      </article>
+    </section>
+
+    <section id="page-profit" class="page">
+      <div class="metric-grid" id="profit-metrics"></div>
+      <article class="card">
+        <div class="card-head"><div><p class="kicker">PROFIT WATERFALL</p><h2>Where every dollar went</h2></div></div>
+        <div id="waterfall" class="waterfall"></div>
+      </article>
+      <article class="card callout">
+        <div><p class="kicker">ACCOUNTING MODEL</p><h2>ROAS never gets to define profit.</h2><p>Shopify revenue is the financial ledger. Ad platforms supply spend and attributed revenue. Profit Tracker subtracts actual costs independently.</p></div>
+      </article>
+    </section>
+
+    <section id="page-ads" class="page">
+      <div class="toolbar">
+        <div class="segmented" id="platform-filter"><button class="active" data-provider="all">All</button></div>
+        <button class="secondary" data-jump="settings">+ Add ad source</button>
+      </div>
+      <div class="metric-grid" id="ads-metrics"></div>
+      <article class="card">
+        <div class="card-head"><div><p class="kicker">MULTI-PLATFORM LEDGER</p><h2>Campaign & creative performance</h2></div><small class="muted">Reported attribution is shown separately from store profit.</small></div>
+        <div class="table-wrap"><table><thead><tr><th>Ad</th><th>Platform</th><th>Campaign</th><th>Spend</th><th>Purchases</th><th>Reported revenue</th><th>ROAS</th><th>CPA</th></tr></thead><tbody id="ads-body"></tbody></table></div>
+      </article>
+    </section>
+
+    <section id="page-orders" class="page">
+      <div class="metric-grid" id="orders-metrics"></div>
+      <article class="card"><div class="card-head"><div><p class="kicker">ORDER LEDGER</p><h2>Profit by order</h2></div></div>
+        <div class="table-wrap"><table><thead><tr><th>Order</th><th>Date</th><th>Revenue</th><th>COGS</th><th>Fulfillment</th><th>Fees</th><th>Blended ad cost</th><th>Profit</th></tr></thead><tbody id="orders-body"></tbody></table></div>
+      </article>
+    </section>
+
+    <section id="page-products" class="page">
+      <div id="product-grid" class="product-grid"></div>
+    </section>
+
+    <section id="page-expenses" class="page">
+      <div class="grid2">
+        <article class="card">
+          <div class="card-head"><div><p class="kicker">ADD EXPENSE</p><h2>Operating expense</h2></div></div>
+          <form id="expense-form" class="form-grid">
+            <label>Label<input name="label" placeholder="Appstle, creator fee, contractor..." required></label>
+            <label>Amount<input name="amount" type="number" min="0" step="0.01" placeholder="0.00" required></label>
+            <label>Date<input name="day" type="date"></label>
+            <label>Category<select name="category"><option>software</option><option>creative</option><option>contractor</option><option>chargeback</option><option>other</option></select></label>
+            <button class="primary" type="submit">Add expense</button>
+          </form>
+        </article>
+        <article class="card">
+          <div class="card-head"><div><p class="kicker">COST ENGINE</p><h2>Add cost rule</h2></div></div>
+          <form id="cost-form" class="form-grid">
+            <label>Name<input name="label" placeholder="3PL pick & pack" required></label>
+            <label>Rule<select name="kind"><option value="fulfillment_per_order">Fulfillment per order</option><option value="variable_per_order">Other variable per order</option><option value="payment_percent">Payment % estimate</option><option value="daily_fixed">Daily fixed cost</option><option value="monthly_fixed">Monthly fixed cost</option></select></label>
+            <label>Value<input name="value" type="number" min="0" step="0.01" required></label>
+            <button class="primary" type="submit">Save rule</button>
+          </form>
+        </article>
+      </div>
+      <article class="card"><div class="card-head"><div><p class="kicker">RECENT</p><h2>Expenses</h2></div></div><div id="expense-list" class="list"></div></article>
+    </section>
+
+    <section id="page-settings" class="page">
+      <div class="settings-grid">
+        <article class="card integration-card">
+          <div class="integration-top"><div class="platform-icon shopify">S</div><div><p class="kicker">COMMERCE</p><h2>Shopify</h2><p>Orders, refunds, product costs, payment fees, shipping revenue.</p></div><span id="shopify-status" class="status-badge">Not connected</span></div>
+          <form id="shopify-form" class="form-grid">
+            <label>Store domain<input name="shop_domain" placeholder="store.myshopify.com" required></label>
+            <label>Admin API token<input name="access_token" type="password" placeholder="shpat_..." required></label>
+            <button class="primary" type="submit">Save Shopify</button>
+            <button id="sync-shopify" class="secondary" type="button">Sync Shopify now</button>
+          </form>
+        </article>
+
+        <article class="card integration-card">
+          <div class="integration-top"><div class="platform-icon meta">M</div><div><p class="kicker">ADS</p><h2>Meta Ads</h2><p>Spend, purchases, purchase value, campaign, ad set and creative metrics.</p></div><span id="meta-status" class="status-badge">Not connected</span></div>
+          <form id="meta-form" class="form-grid">
+            <label>Access token<input name="access_token" type="password" placeholder="Meta Marketing API token" required></label>
+            <label>Ad account ID<input name="account_id" placeholder="act_123... (optional)"></label>
+            <button class="primary" type="submit">Save Meta</button>
+            <button id="sync-meta" class="secondary" type="button">Sync Meta now</button>
+          </form>
+        </article>
+      </div>
+
+      <article class="card">
+        <div class="card-head"><div><p class="kicker">ALL OTHER AD PLATFORMS</p><h2>Import ad spend from anywhere</h2></div><span class="status-badge good">Universal ledger</span></div>
+        <p class="muted">Google Ads, TikTok, Snapchat, Pinterest, Microsoft Ads, Amazon Ads, X, Reddit, or any network can be tracked immediately with CSV import while API connections are added.</p>
+        <div class="import-row">
+          <select id="import-provider"><option value="google">Google Ads</option><option value="tiktok">TikTok Ads</option><option value="snapchat">Snapchat Ads</option><option value="pinterest">Pinterest Ads</option><option value="microsoft">Microsoft Ads</option><option value="amazon">Amazon Ads</option><option value="x">X Ads</option><option value="reddit">Reddit Ads</option><option value="other">Other</option></select>
+          <input id="import-file" type="file" accept=".csv,text/csv">
+          <button id="import-btn" class="primary">Import CSV</button>
+        </div>
+        <div class="csv-help">Accepted headers: <code>date/day, campaign_name, ad_name, spend, impressions, clicks, purchases/conversions, purchase_value/revenue, roas</code></div>
+      </article>
+
+      <article class="card">
+        <div class="card-head"><div><p class="kicker">CONNECTION HEALTH</p><h2>Data sources</h2></div></div>
+        <div id="integration-list" class="integration-list"></div>
+      </article>
+    </section>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js"></script>
+<script src="./app.js?v=1"></script>
+</body>
+</html>
