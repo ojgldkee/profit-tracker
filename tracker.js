@@ -17,6 +17,11 @@ const firstKey="pt_first_touch";
 let first={};
 try{first=JSON.parse(localStorage.getItem(firstKey)||"{}")}catch{}
 const params=new URLSearchParams(location.search);
+function cookie(name){
+  const m=document.cookie.match(new RegExp("(?:^|; )"+name.replace(/[.$?*|{}()[\]\\/+^]/g,"\\const params=new URLSearchParams(location.search);
+const current={")+"=([^;]*)"));
+  return m?decodeURIComponent(m[1]):null;
+}
 const current={
   utm_source:params.get("utm_source")||null,
   utm_medium:params.get("utm_medium")||null,
@@ -27,6 +32,9 @@ const current={
   gclid:params.get("gclid")||null,
   ttclid:params.get("ttclid")||null,
   msclkid:params.get("msclkid")||null,
+  fbp:cookie("_fbp"),
+  fbc:cookie("_fbc"),
+  ttp:cookie("_ttp"),
   url:location.href,
   referrer:document.referrer||null
 };
@@ -54,7 +62,10 @@ async function persistCartAttributes(token){
       pt_utm_content:first.utm_content||current.utm_content||"",
       pt_fbclid:first.fbclid||current.fbclid||"",
       pt_gclid:first.gclid||current.gclid||"",
-      pt_ttclid:first.ttclid||current.ttclid||""
+      pt_ttclid:first.ttclid||current.ttclid||"",
+      pt_fbp:first.fbp||current.fbp||"",
+      pt_fbc:first.fbc||current.fbc||"",
+      pt_ttp:first.ttp||current.ttp||""
     };
     await fetch("/cart/update.js",{method:"POST",headers:{"content-type":"application/json"},credentials:"same-origin",body:JSON.stringify({attributes:attrs})});
   }catch{}
