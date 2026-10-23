@@ -72,7 +72,7 @@ function openPage(page){
 $("range-select").onchange=async e=>{state.range=Number(e.target.value);await loadData();render()};
 $("refresh-btn").onclick=async()=>{await loadAll();toast("Dashboard refreshed")};
 if($("store-select"))$("store-select").onchange=async e=>{
-  const id=e.target.value;if(!id)return;
+  const id=e.target.value;if(!id||id==="No store")return;
   localStorage.setItem("pt_store_id",id);
   state.addingStore=false;state.editingShopify=false;
   await loadAll(id);
@@ -155,7 +155,7 @@ function render(){
 
   renderComparisons(currency);
   $("overview-metrics").innerHTML=[
-    metric("Net revenue",money(s.net,currency),s.orders+" orders"),
+    metric("Net revenue",money(s.net,currency),s.orders+" real order"+(s.orders===1?"":"s")+" · test orders excluded"),
     metric("Ad spend",money(s.adSpend,currency),money(s.cpa,currency)+" blended CPA"),
     metric("Blended MER",s.mer.toFixed(2)+"×","Shopify revenue ÷ all ad spend"),
     metric("Reported ROAS",s.platformRoas.toFixed(2)+"×","Platform-reported attribution"),
@@ -227,7 +227,7 @@ const metricInfo={
   "Revenue":{formula:"Net Shopify revenue in the selected period.",sources:["Shopify"]},
   "Blended profit":{formula:"Order pre-ad contribution minus blended share of that day's ad spend.",sources:["Shopify","All ad platforms"]},
   "COGS":{formula:"Quantity × Shopify variant unit cost or configured override.",sources:["Shopify inventory cost","Profit Tracker override"]},
-  "Payment fees":{formula:"Actual transaction fees reported on Shopify transactions when available.",sources:["Shopify transactions"]},
+  "Payment fees":{formula:"Actual Shopify transaction fees when available. If Shopify does not return a fee, Profit Tracker estimates it from the detected Shopify plan and labels it Estimated.",sources:["Shopify transactions","Detected Shopify plan"]},
   "Profit / order":{formula:"Total blended contribution profit ÷ order count.",sources:["Profit Tracker order ledger"]}
 };
 function attachMetricExplainers(){
@@ -454,7 +454,7 @@ function renderOrders(c){
   const arr=state.orders;
   const rev=sum(arr,"net_revenue"),profit=sum(arr,"blended_contribution_profit"),fees=sum(arr,"payment_fees"),cogs=sum(arr,"cogs");
   $("orders-metrics").innerHTML=[metric("Orders",arr.length.toString()),metric("Revenue",money(rev,c)),metric("Blended profit",money(profit,c),"",profit>=0?"good":"bad"),metric("COGS",money(cogs,c)),metric("Payment fees",money(fees,c)),metric("Profit / order",money(arr.length?profit/arr.length:0,c))].join("");
-  $("orders-body").innerHTML=arr.map(o=>'<tr><td><b>'+esc(o.order_name)+'</b></td><td>'+new Date(o.created_at).toLocaleString()+'</td><td>'+money(o.net_revenue,c)+'</td><td>'+money(o.cogs,c)+'</td><td>'+money(o.fulfillment_cost,c)+'</td><td>'+money(o.payment_fees,c)+'</td><td>'+money(o.blended_ad_cost,c)+'</td><td class="'+(n(o.blended_contribution_profit)>=0?"positive":"negative")+'"><b>'+money(o.blended_contribution_profit,c)+'</b></td></tr>').join("")||'<tr><td colspan="8" class="empty">No Shopify orders synced.</td></tr>';
+  $("orders-body").innerHTML=arr.map(o=>'<tr><td><b>'+esc(o.order_name)+'</b></td><td>'+new Date(o.created_at).toLocaleString()+'</td><td>'+money(o.net_revenue,c)+'</td><td>'+money(o.cogs,c)+'</td><td>'+money(o.fulfillment_cost,c)+'</td><td>'+money(o.payment_fees,c)+'<small>'+(o.payment_fee_estimated?"Estimated from "+esc(state.store?.shopify_plan||"Shopify")+" plan":"Actual Shopify fee")+'</small></td><td>'+money(o.blended_ad_cost,c)+'</td><td class="'+(n(o.blended_contribution_profit)>=0?"positive":"negative")+'"><b>'+money(o.blended_contribution_profit,c)+'</b></td></tr>').join("")||'<tr><td colspan="8" class="empty">No Shopify orders synced.</td></tr>';
 }
 
 function renderProducts(c){
@@ -476,6 +476,7 @@ function renderSettings(){
   if($("setup-intro"))$("setup-intro").classList.toggle("hidden",connected);
   if($("shopify-connected-summary"))$("shopify-connected-summary").classList.toggle("hidden",!connected);
   if($("shopify-card"))$("shopify-card").classList.toggle("hidden",connected&&!state.editingShopify&&!state.addingStore);
+  if($("cancel-shopify-edit"))$("cancel-shopify-edit").classList.toggle("hidden",!connected&&!state.addingStore);
 
   $("shopify-status").textContent=connected?(permissionsOk===false?"Connected · needs permissions":(trackerInstalled?"Connected + tracking":"Connected")):"Not connected";
   $("shopify-status").classList.toggle("good",connected&&permissionsOk!==false);
@@ -531,10 +532,11 @@ $("shopify-form").onsubmit=async e=>{
 if($("repair-shopify"))$("repair-shopify").onclick=()=>{
   state.editingShopify=true;state.addingStore=false;
   $("shopify-card").classList.remove("hidden");
-  $("shopify-form").shop_domain.value=state.store?.shop_domain||"";
-  $("shopify-form").client_id.value=(state.integrations.find(x=>x.provider==="shopify")?.metadata?.client_id)||"";
-  $("shopify-form").client_secret.value="";
-  $("shopify-form").access_token.value="";
+  const form=$("shopify-form");
+  form.elements.namedItem("shop_domain").value=state.store?.shop_domain||"";
+  form.elements.namedItem("client_id").value=(state.integrations.find(x=>x.provider==="shopify")?.metadata?.client_id)||"";
+  form.elements.namedItem("client_secret").value="";
+  form.elements.namedItem("access_token").value="";
   $("shopify-card").scrollIntoView({behavior:"smooth",block:"start"});
 };
 if($("add-store"))$("add-store").onclick=()=>{
