@@ -122,3 +122,10 @@ table{min-width:900px}th{font-size:10px;padding:12px 13px;color:#8995a4}td{font-
   .connected-store-actions{display:grid;grid-template-columns:1fr 1fr}
   .connected-store-actions button{justify-content:center}
 }
+
+.button-link{display:inline-flex;align-items:center;justify-content:center;gap:7px;text-decoration:none}
+.secondary.subtle{opacity:.78}
+.permission-warning small{line-height:1.55}
+.permission-warning small strong{color:#f0d28b}
+.permission-warning code{font-size:10px;color:#f5d890;background:#15120b;border:1px solid #49391a;border-radius:5px;padding:1px 4px}
+button:disabled{opacity:.52;cursor:not-allowed}
