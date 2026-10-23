@@ -472,6 +472,9 @@ function renderSettings(){
   const trackerInstalled=Boolean(sh?.metadata?.tracker_installed);
   const permissionsOk=sh?.metadata?.permissions_ok;
   const missing=sh?.metadata?.missing_scopes||[];
+  const missingOptional=sh?.metadata?.missing_optional_scopes||[];
+  const grantedScopes=String(sh?.metadata?.scope||"").split(",").map(x=>x.trim()).filter(Boolean);
+  const trackerPermission=grantedScopes.includes("write_themes")||grantedScopes.includes("write_script_tags");
 
   if($("setup-intro"))$("setup-intro").classList.toggle("hidden",connected);
   if($("shopify-connected-summary"))$("shopify-connected-summary").classList.toggle("hidden",!connected);
@@ -495,12 +498,17 @@ function renderSettings(){
     if(permissionsOk!==true||sh.last_error){
       warning.classList.remove("hidden");
       const unverified=permissionsOk==null&&!sh.last_error;
-      const detail=missing.length?("Missing: "+missing.join(", ")):(sh.last_error||(unverified?"Permissions have not been verified by a successful sync yet.":"Shopify permissions need attention."));
-      warning.innerHTML='<i class="fa-solid fa-triangle-exclamation"></i><div><b>'+(unverified?"Verify Shopify permissions":"Connection needs permissions")+'</b><span>'+esc(detail)+'</span><small>Required: read_orders, read_products, read_customers. Optional: read_all_orders for 365-day history and write_themes for automatic tracker installation.</small></div>';
+      const detail=missing.length?("Missing required: "+missing.join(", ")):(sh.last_error||(unverified?"Permissions have not been verified yet.":"Shopify permissions need attention."));
+      warning.innerHTML='<i class="fa-solid fa-triangle-exclamation"></i><div><b>'+(unverified?"Verify Shopify permissions":"Connection needs permissions")+'</b><span>'+esc(detail)+'</span><small><strong>Do this once:</strong> Shopify Dev Dashboard → Apps → Profit Tracker → Versions → Create version → add <code>read_orders</code>, <code>read_products</code>, <code>read_customers</code>, <code>read_all_orders</code>, <code>write_themes</code> → Release. Then click <b>Re-check permissions</b> here.</small></div>';
     }else warning.classList.add("hidden");
   }
 
-  if($("install-tracker"))$("install-tracker").innerHTML=trackerInstalled?'<i class="fa-solid fa-check"></i> Tracking installed':'<i class="fa-solid fa-crosshairs"></i> Install tracking';
+  if($("install-tracker")){
+    const btn=$("install-tracker");
+    btn.innerHTML=trackerInstalled?'<i class="fa-solid fa-check"></i> Tracking installed':(trackerPermission?'<i class="fa-solid fa-crosshairs"></i> Install tracking':'<i class="fa-solid fa-lock"></i> Tracking needs write_themes');
+    btn.disabled=trackerInstalled||(!trackerPermission&&permissionsOk===true);
+    btn.title=!trackerPermission?"Add write_themes to the Shopify app version and release it.":"";
+  }
 
   $("meta-status").textContent=me?"Connected":"Not connected";$("meta-status").classList.toggle("good",!!me);
   if($("google-status")){$("google-status").textContent=go?"Connected":"Not connected";$("google-status").classList.toggle("good",!!go)}
@@ -530,7 +538,16 @@ $("shopify-form").onsubmit=async e=>{
     await loadAll(j.store_id||state.store?.id);
   }catch(err){toast(err.message,"bad")}
 };
-if($("repair-shopify"))$("repair-shopify").onclick=()=>{
+if($("repair-shopify"))$("repair-shopify").onclick=async()=>{
+  const btn=$("repair-shopify"),old=btn.innerHTML;btn.disabled=true;btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Checking…';
+  try{
+    const r=await invoke("repairShopify");
+    toast(r.message,r.permissions_ok?"good":"bad");
+    await loadAll(state.store?.id);
+  }catch(err){toast(err.message,"bad")}
+  finally{btn.disabled=false;btn.innerHTML=old}
+};
+if($("edit-shopify"))$("edit-shopify").onclick=()=>{
   state.editingShopify=true;state.addingStore=false;
   $("shopify-card").classList.remove("hidden");
   const form=$("shopify-form");
@@ -559,10 +576,15 @@ $("sync-meta").onclick=()=>sync("syncMeta",$("sync-meta"));
 if($("sync-google"))$("sync-google").onclick=()=>sync("syncGoogle",$("sync-google"));
 if($("sync-tiktok"))$("sync-tiktok").onclick=()=>sync("syncTikTok",$("sync-tiktok"));
 $("install-tracker").onclick=async()=>{
-  const btn=$("install-tracker"),old=btn.textContent;btn.disabled=true;btn.textContent="Installing…";
+  const shopify=state.integrations.find(x=>x.provider==="shopify");
+  const scopes=String(shopify?.metadata?.scope||"").split(",");
+  if(!scopes.includes("write_themes")&&!scopes.includes("write_script_tags")){
+    return toast("Add write_themes to your Shopify app version, release it, then click Re-check permissions first.","bad");
+  }
+  const btn=$("install-tracker"),old=btn.innerHTML;btn.disabled=true;btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Installing…';
   try{const r=await invoke("installTracker");toast(r.message||"Tracker installed");await loadAll()}
   catch(err){toast(err.message,"bad")}
-  finally{btn.disabled=false;btn.textContent=old}
+  finally{btn.disabled=false;btn.innerHTML=old}
 };
 async function sync(action,btn){const old=btn.textContent;btn.disabled=true;btn.textContent="Syncing…";try{const j=await invoke(action);toast(j.message);await loadAll()}catch(err){toast(err.message,"bad")}finally{btn.disabled=false;btn.textContent=old}}
 
