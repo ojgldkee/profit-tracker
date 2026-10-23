@@ -35,7 +35,7 @@ export async function POST(){
   const cred=(await db.from("integration_credentials").select("access_token").eq("store_id",store.id).eq("provider","shopify").maybeSingle()).data;
   if(!cred?.access_token)return NextResponse.json({error:"Shopify is not connected."},{status:400});
   const version=process.env.SHOPIFY_API_VERSION||"2026-10";
-  const r=await fetch(`https://${store.shop_domain}/admin/api/${version}/graphql.json`,{method:"POST",headers:{"content-type":"application/json","x-shopify-access-token":cred.access_token},body:JSON.stringify({query:QUERY,variables:{first:100,query:"created_at:>=-60d"}})});
+  const r=await fetch(`https://${store.shop_domain}/admin/api/${version}/graphql.json`,{method:"POST",headers:{"content-type":"application/json","x-shopify-access-token":cred.access_token},body:JSON.stringify({query:QUERY,variables:{first:100,query:"created_at:>="+new Date(Date.now()-60*86400000).toISOString()}})});
   const body=await r.json();
   if(!r.ok||body.errors)return NextResponse.json({error:"Shopify sync failed.",detail:body.errors||body},{status:502});
   const orders=body.data?.orders?.nodes||[];
