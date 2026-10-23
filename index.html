@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#090b0f"/>
   <title>Profit Tracker</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"/>
-  <link rel="stylesheet" href="./styles.css?v=5"/>
+  <link rel="stylesheet" href="./styles.css?v=6"/>
 </head>
 <body>
 <div id="toast"></div>
@@ -283,7 +283,8 @@
               <li>Shopify Admin → Settings → Apps → Develop apps → Build apps in Dev Dashboard</li>
               <li>Open your Profit Tracker app</li>
               <li>Copy the Client ID and Client secret</li>
-              <li>Make sure the app version includes order/customer/product access and <code>write_themes</code> if you want one-click tracking installation</li>
+              <li>Add <code>read_orders</code>, <code>read_products</code>, and <code>read_customers</code>. Add <code>read_all_orders</code> for 365-day history and <code>write_themes</code> for one-click tracking installation.</li>
+              <li>Release the app version, then come back here and click Repair connection.</li>
             </ol>
           </div>
 
@@ -360,6 +361,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js"></script>
-<script src="./app.js?v=5"></script>
+<script src="./app.js?v=6"></script>
 </body>
 </html>
