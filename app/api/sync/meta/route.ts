@@ -9,7 +9,8 @@ export async function POST(){
   if(!store)return NextResponse.json({error:"Create/connect a store first."},{status:400});
   const cred=(await db.from("integration_credentials").select("*").eq("store_id",store.id).eq("provider","meta").maybeSingle()).data;
   if(!cred?.access_token)return NextResponse.json({error:"Meta is not connected."},{status:400});
-  const version=process.env.META_API_VERSION||"v23.0";\n  let accountId=cred.external_account_id;
+  const version=process.env.META_API_VERSION||"v23.0";
+  let accountId=cred.external_account_id;
   if(!accountId){
     const a=await fetch(`https://graph.facebook.com/${version}/me/adaccounts?fields=id,name,account_id&limit=50&access_token=`+encodeURIComponent(cred.access_token));
     const j=await a.json(); accountId=j.data?.[0]?.id;
