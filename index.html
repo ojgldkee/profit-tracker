@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
   <meta name="theme-color" content="#090b0f"/>
   <title>Profit Tracker</title>
-  <link rel="stylesheet" href="./styles.css?v=3"/>
+  <link rel="stylesheet" href="./styles.css?v=4"/>
 </head>
 <body>
 <div id="toast"></div>
@@ -108,6 +108,17 @@
       </div>
 
       <article class="card">
+        <div class="card-head"><div><p class="kicker">BUSINESS TRENDS</p><h2>What is getting better or worse?</h2></div><small class="muted">Each chart uses the selected date range.</small></div>
+        <div class="trend-metric-grid">
+          <div class="trend-mini"><span>CPA</span><b id="trend-cpa-value">—</b><div id="trend-cpa" class="spark"></div></div>
+          <div class="trend-mini"><span>MER</span><b id="trend-mer-value">—</b><div id="trend-mer" class="spark"></div></div>
+          <div class="trend-mini"><span>Margin</span><b id="trend-margin-value">—</b><div id="trend-margin" class="spark"></div></div>
+          <div class="trend-mini"><span>AOV</span><b id="trend-aov-value">—</b><div id="trend-aov" class="spark"></div></div>
+          <div class="trend-mini"><span>Break-even CPA</span><b id="trend-becpa-value">—</b><div id="trend-becpa" class="spark"></div></div>
+        </div>
+      </article>
+
+      <article class="card">
         <div class="card-head"><div><p class="kicker">CHANNEL PROFIT SIGNAL</p><h2>Ad platforms</h2></div><button class="link-btn" data-jump="ads">Open ads →</button></div>
         <div id="platform-cards" class="platform-cards"></div>
       </article>
@@ -164,9 +175,19 @@
 
     <section id="page-subscriptions" class="page">
       <div class="metric-grid" id="subscription-metrics"></div>
+      <div class="grid2">
+        <article class="card">
+          <div class="card-head"><div><p class="kicker">MONTHLY COHORTS</p><h2>Subscription profitability heatmap</h2></div></div>
+          <div id="cohort-monthly" class="cohort-wrap"></div>
+        </article>
+        <article class="card">
+          <div class="card-head"><div><p class="kicker">WEEKLY COHORTS</p><h2>Early retention & contribution</h2></div></div>
+          <div id="cohort-weekly" class="cohort-wrap"></div>
+        </article>
+      </div>
       <article class="card">
-        <div class="card-head"><div><p class="kicker">SUBSCRIPTION ECONOMICS</p><h2>First order → rebills → payback</h2></div><small class="muted">Uses Shopify selling plans and rebill orders.</small></div>
-        <div class="table-wrap"><table><thead><tr><th>Subscription</th><th>Orders</th><th>Rebills</th><th>First-order profit</th><th>Rebill revenue</th><th>LTV</th><th>30d profit</th><th>60d</th><th>90d</th><th>Payback</th></tr></thead><tbody id="subscriptions-body"></tbody></table></div>
+        <div class="card-head"><div><p class="kicker">SUBSCRIPTION ECONOMICS</p><h2>First order → rebills → payback</h2></div><small class="muted">Confirmed churn is shown only when the subscription provider exposes contract status; otherwise status is clearly marked inferred.</small></div>
+        <div class="table-wrap"><table><thead><tr><th>Subscription</th><th>Status</th><th>Orders</th><th>Rebills</th><th>First-order profit</th><th>Rebill revenue</th><th>LTV</th><th>30d profit</th><th>60d</th><th>90d</th><th>Payback</th></tr></thead><tbody id="subscriptions-body"></tbody></table></div>
       </article>
     </section>
 
@@ -207,42 +228,103 @@
     </section>
 
     <section id="page-settings" class="page">
+      <div class="setup-intro card">
+        <div>
+          <p class="kicker">EASY SETUP</p>
+          <h2>Connect your store in a few steps</h2>
+          <p class="muted big-copy">Start with Shopify. Then connect the ad platforms you actually use. Profit Tracker will pull orders, costs, ad spend, attribution and subscription economics into one place.</p>
+        </div>
+        <div class="setup-steps">
+          <span><b>1</b> Shopify</span><span><b>2</b> Ads</span><span><b>3</b> Install tracking</span><span><b>4</b> Done</span>
+        </div>
+      </div>
+
       <div class="settings-grid">
-        <article class="card integration-card">
-          <div class="integration-top"><div class="platform-icon shopify">S</div><div><p class="kicker">COMMERCE</p><h2>Shopify</h2><p>Orders, refunds, product costs, payment fees, shipping revenue.</p></div><span id="shopify-status" class="status-badge">Not connected</span></div>
+        <article class="card integration-card featured">
+          <div class="integration-top">
+            <div class="platform-icon shopify">S</div>
+            <div><p class="kicker">STEP 1 · COMMERCE</p><h2>Shopify</h2><p>Orders, refunds, product costs, payment fees, customers and subscriptions.</p></div>
+            <span id="shopify-status" class="status-badge">Not connected</span>
+          </div>
+
+          <div class="help-box">
+            <b>Shopify changed this in 2026.</b>
+            <p>For new custom apps, you usually will not find a copyable Admin API token in Shopify. Use the <strong>Client ID</strong> and <strong>Client secret</strong> from your app in Shopify Dev Dashboard instead.</p>
+            <ol>
+              <li>Shopify Admin → Settings → Apps → Develop apps → Build apps in Dev Dashboard</li>
+              <li>Open your Profit Tracker app</li>
+              <li>Copy the Client ID and Client secret</li>
+              <li>Make sure the app version includes order/customer/product access and <code>write_themes</code> if you want one-click tracking installation</li>
+            </ol>
+          </div>
+
           <form id="shopify-form" class="form-grid">
-            <label>Store domain<input name="shop_domain" placeholder="store.myshopify.com" required></label>
-            <label>Admin API token<input name="access_token" type="password" placeholder="shpat_..." required></label>
-            <button class="primary" type="submit">Save Shopify</button>
-            <button id="sync-shopify" class="secondary" type="button">Sync Shopify now</button>
-            <button id="install-tracker" class="secondary" type="button">Install first-party tracker</button>
+            <label class="span2">Your Shopify store domain
+              <input name="shop_domain" placeholder="your-store.myshopify.com" required>
+              <small>Use the permanent .myshopify.com address, not your custom domain.</small>
+            </label>
+            <label>Client ID
+              <input name="client_id" autocomplete="off" placeholder="From Shopify Dev Dashboard">
+            </label>
+            <label>Client secret
+              <input name="client_secret" type="password" autocomplete="new-password" placeholder="From Shopify Dev Dashboard">
+            </label>
+            <details class="advanced span2">
+              <summary>Using an old Shopify custom app? Use legacy Admin API token instead</summary>
+              <label>Legacy Admin API token<input name="access_token" type="password" placeholder="shpat_..."></label>
+            </details>
+            <button class="primary large" type="submit">Connect Shopify</button>
+            <button id="sync-shopify" class="secondary large" type="button">Sync Shopify data</button>
+            <button id="install-tracker" class="secondary large span2" type="button">Install first-party tracker automatically</button>
           </form>
         </article>
 
         <article class="card integration-card">
-          <div class="integration-top"><div class="platform-icon meta">M</div><div><p class="kicker">ADS</p><h2>Meta Ads</h2><p>Spend, purchases, purchase value, campaign, ad set and creative metrics.</p></div><span id="meta-status" class="status-badge">Not connected</span></div>
+          <div class="integration-top"><div class="platform-icon meta">M</div><div><p class="kicker">ADS</p><h2>Meta Ads</h2><p>Spend, purchases, campaigns, ad sets and creative performance.</p></div><span id="meta-status" class="status-badge">Not connected</span></div>
           <form id="meta-form" class="form-grid">
-            <label>Access token<input name="access_token" type="password" placeholder="Meta Marketing API token" required></label>
-            <label>Ad account ID<input name="account_id" placeholder="act_123... (optional)"></label>
-            <button class="primary" type="submit">Save Meta</button>
-            <button id="sync-meta" class="secondary" type="button">Sync Meta now</button>
+            <label class="span2">Meta access token<input name="access_token" type="password" placeholder="Marketing API access token" required></label>
+            <label class="span2">Ad account ID<input name="account_id" placeholder="act_123... (optional if auto-discovered)"></label>
+            <button class="primary large" type="submit">Connect Meta</button>
+            <button id="sync-meta" class="secondary large" type="button">Sync Meta now</button>
+          </form>
+        </article>
+
+        <article class="card integration-card">
+          <div class="integration-top"><div class="platform-icon google">G</div><div><p class="kicker">ADS</p><h2>Google Ads</h2><p>Native Google Ads API connection using the current v26 reporting API.</p></div><span id="google-status" class="status-badge">Not connected</span></div>
+          <form id="google-form" class="form-grid">
+            <label class="span2">OAuth access token<input name="access_token" type="password" placeholder="Google OAuth access token" required></label>
+            <label>Developer token<input name="developer_token" type="password" placeholder="Google Ads developer token" required></label>
+            <label>Customer ID<input name="customer_id" placeholder="123-456-7890" required></label>
+            <label class="span2">Manager customer ID <small>(only if you use an MCC)</small><input name="login_customer_id" placeholder="Optional"></label>
+            <button class="primary large" type="submit">Connect Google Ads</button>
+            <button id="sync-google" class="secondary large" type="button">Sync Google now</button>
+          </form>
+        </article>
+
+        <article class="card integration-card">
+          <div class="integration-top"><div class="platform-icon tiktok">T</div><div><p class="kicker">ADS</p><h2>TikTok Ads</h2><p>Native TikTok API for Business reporting connection.</p></div><span id="tiktok-status" class="status-badge">Not connected</span></div>
+          <form id="tiktok-form" class="form-grid">
+            <label class="span2">TikTok access token<input name="access_token" type="password" placeholder="TikTok advertiser access token" required></label>
+            <label class="span2">Advertiser ID<input name="advertiser_id" placeholder="TikTok advertiser ID" required></label>
+            <button class="primary large" type="submit">Connect TikTok Ads</button>
+            <button id="sync-tiktok" class="secondary large" type="button">Sync TikTok now</button>
           </form>
         </article>
       </div>
 
       <article class="card">
-        <div class="card-head"><div><p class="kicker">ALL OTHER AD PLATFORMS</p><h2>Import ad spend from anywhere</h2></div><span class="status-badge good">Universal ledger</span></div>
-        <p class="muted">Google Ads, TikTok, Snapchat, Pinterest, Microsoft Ads, Amazon Ads, X, Reddit, or any network can be tracked immediately with CSV import while API connections are added.</p>
+        <div class="card-head"><div><p class="kicker">OTHER PLATFORMS</p><h2>Import a CSV if there is no connection yet</h2></div><span class="status-badge good">Universal ledger</span></div>
+        <p class="muted big-copy">Snapchat, Pinterest, Microsoft Ads, Amazon Ads, X, Reddit and other networks can still be included immediately.</p>
         <div class="import-row">
           <select id="import-provider"><option value="google">Google Ads</option><option value="tiktok">TikTok Ads</option><option value="snapchat">Snapchat Ads</option><option value="pinterest">Pinterest Ads</option><option value="microsoft">Microsoft Ads</option><option value="amazon">Amazon Ads</option><option value="x">X Ads</option><option value="reddit">Reddit Ads</option><option value="other">Other</option></select>
           <input id="import-file" type="file" accept=".csv,text/csv">
-          <button id="import-btn" class="primary">Import CSV</button>
+          <button id="import-btn" class="primary large">Import CSV</button>
         </div>
         <div class="csv-help">Accepted headers: <code>date/day, campaign_name, ad_name, spend, impressions, clicks, purchases/conversions, purchase_value/revenue, roas</code></div>
       </article>
 
       <article class="card">
-        <div class="card-head"><div><p class="kicker">CONNECTION HEALTH</p><h2>Data sources</h2></div></div>
+        <div class="card-head"><div><p class="kicker">CONNECTION HEALTH</p><h2>What is connected?</h2></div></div>
         <div id="integration-list" class="integration-list"></div>
       </article>
     </section>
@@ -250,6 +332,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js"></script>
-<script src="./app.js?v=3"></script>
+<script src="./app.js?v=4"></script>
 </body>
 </html>
