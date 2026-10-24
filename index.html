@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#090b0f"/>
   <title>Profit Tracker</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"/>
-  <link rel="stylesheet" href="./styles.css?v=7"/>
+  <link rel="stylesheet" href="./styles.css?v=8"/>
 </head>
 <body>
 <div id="toast"></div>
@@ -68,6 +68,7 @@
           <i class="fa-brands fa-shopify"></i>
           <select id="store-select" aria-label="Tracked store"></select>
         </div>
+        <span id="freshness-badge" class="freshness-badge stale"><i class="fa-solid fa-circle"></i> Checking data…</span>
         <select id="range-select">
           <option value="1">Today</option>
           <option value="7" selected>Last 7 days</option>
@@ -363,6 +364,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js"></script>
-<script src="./app.js?v=7"></script>
+<script src="./app.js?v=8"></script>
 </body>
 </html>
