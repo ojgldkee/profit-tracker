@@ -11,7 +11,9 @@ const pct=v=>new Intl.NumberFormat("en-US",{style:"percent",maximumFractionDigit
 const n=v=>Number(v||0);
 const sum=(arr,key)=>arr.reduce((s,x)=>s+n(x[key]),0);
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
-const isoStart=days=>new Date(Date.now()-(days-1)*86400000).toISOString().slice(0,10);
+const localISO=(d=new Date())=>{const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0");return y+"-"+m+"-"+day};
+const addLocalDays=(days,from=new Date())=>{const d=new Date(from);d.setDate(d.getDate()+days);return localISO(d)};
+const isoStart=days=>addLocalDays(-(days-1));
 const toast=(msg,type="good")=>{const d=document.createElement("div");d.className="toast "+type;d.textContent=msg;$("toast").appendChild(d);setTimeout(()=>d.remove(),4200)};
 
 async function invoke(action,payload={}){
@@ -199,15 +201,15 @@ function deltaText(current,previous){
 function renderComparisons(currency){
   const rows=[...state.dailyAll].sort((a,b)=>a.day.localeCompare(b.day));
   const byDay=Object.fromEntries(rows.map(x=>[x.day,x]));
-  const today=new Date().toISOString().slice(0,10);
-  const yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10);
-  const lastWeek=new Date(Date.now()-7*86400000).toISOString().slice(0,10);
+  const today=localISO();
+  const yesterday=addLocalDays(-1);
+  const lastWeek=addLocalDays(-7);
   const t=summary(byDay[today]?[byDay[today]]:[]);
   const y=summary(byDay[yesterday]?[byDay[yesterday]]:[]);
   const lw=summary(byDay[lastWeek]?[byDay[lastWeek]]:[]);
   const curr7=summary(rows.filter(x=>x.day>=isoStart(7)));
-  const prev7Start=new Date(Date.now()-13*86400000).toISOString().slice(0,10);
-  const prev7End=new Date(Date.now()-7*86400000).toISOString().slice(0,10);
+  const prev7Start=addLocalDays(-13);
+  const prev7End=addLocalDays(-7);
   const prev7=summary(rows.filter(x=>x.day>=prev7Start&&x.day<=prev7End));
   $("comparison-strip").innerHTML=[
     '<div class="comparison"><span>Today vs yesterday</span><b class="'+(t.profit>=y.profit?"positive":"negative")+'">'+deltaText(t.profit,y.profit)+' profit</b><small>'+money(t.profit,currency)+' today</small></div>',
@@ -302,7 +304,7 @@ function rangeAttributionSummary(){
 }
 function renderFreshness(){
   const el=$("freshness-badge");if(!el)return;
-  const f=state.freshness||{},today=new Date().toISOString().slice(0,10),latest=f.latest_ad_day||null;
+  const f=state.freshness||{},today=localISO(),latest=f.latest_ad_day||null;
   const updated=f.latest_ad_update_at?new Date(f.latest_ad_update_at):null;
   const minutes=updated?Math.max(0,Math.round((Date.now()-updated.getTime())/60000)):null;
   const stale=!latest||latest<today||minutes==null||minutes>90;
@@ -578,11 +580,18 @@ function renderSettings(){
     btn.title=!trackerPermission?"Add write_themes to the Shopify app version and release it.":"";
   }
 
-  $("meta-status").textContent=me?"Connected":"Not connected";$("meta-status").classList.toggle("good",!!me);
+  const metaMirror=me?.metadata?.sync_mode==="chatgpt_connector";
+  $("meta-status").textContent=me?(metaMirror?(me.metadata?.automatic?"Auto-sync hourly":"Connector mirror"):"Connected"):"Not connected";
+  $("meta-status").classList.toggle("good",!!me);
+  if($("sync-meta")){
+    $("sync-meta").disabled=Boolean(metaMirror);
+    $("sync-meta").textContent=metaMirror?"Auto-sync hourly":"Sync Meta now";
+    $("sync-meta").title=metaMirror?"Meta is mirrored from the connected Ads Manager account every hour.":"";
+  }
   if($("google-status")){$("google-status").textContent=go?"Connected":"Not connected";$("google-status").classList.toggle("good",!!go)}
   if($("tiktok-status")){$("tiktok-status").textContent=tt?"Connected":"Not connected";$("tiktok-status").classList.toggle("good",!!tt)}
 
-  $("integration-list").innerHTML=state.integrations.length?state.integrations.map(x=>'<div class="integration-row"><div class="integration-name">'+providerIcon(x.provider)+'<div><b>'+esc(x.provider)+'</b><small>'+(x.last_sync_at?"Last synced "+new Date(x.last_sync_at).toLocaleString():"Connected · sync not run yet")+(x.last_error?'<br>'+esc(x.last_error):'')+'</small></div></div><span class="status-badge '+(x.last_error?"":"good")+'">'+(x.last_error?"Needs attention":"Connected")+'</span></div>').join(""):'<div class="empty">No API connections yet.</div>';
+  $("integration-list").innerHTML=state.integrations.length?state.integrations.map(x=>'<div class="integration-row"><div class="integration-name">'+providerIcon(x.provider)+'<div><b>'+esc(x.provider)+'</b><small>'+(x.metadata?.sync_mode==="chatgpt_connector"?"Hourly connector sync · ":"")+(x.last_sync_at?"Last synced "+new Date(x.last_sync_at).toLocaleString():"Connected · sync not run yet")+(x.last_error?'<br>'+esc(x.last_error):'')+'</small></div></div><span class="status-badge '+(x.last_error?"":"good")+'">'+(x.last_error?"Needs attention":(x.metadata?.automatic?"Auto":"Connected"))+'</span></div>').join(""):'<div class="empty">No API connections yet.</div>';
 }
 function renderHealth(){
   const shopify=state.integrations.find(x=>x.provider==="shopify");
@@ -590,7 +599,7 @@ function renderHealth(){
   const synced=state.integrations.some(x=>x.last_sync_at);
   const hardErrors=state.integrations.filter(x=>x.provider!=="meta").some(x=>x.last_error);
   const latest=state.freshness?.latest_ad_day||null;
-  const today=new Date().toISOString().slice(0,10);
+  const today=localISO();
   const adsStale=Boolean(meta)&&(!latest||latest<today);
   const hasError=hardErrors||adsStale;
   $("health-dot").classList.toggle("good",synced&&!hasError);
@@ -675,4 +684,20 @@ function parseCSV(text){
 }
 
 sb.auth.onAuthStateChange(async(event,session)=>{state.session=session;if(event==="SIGNED_OUT")showAuth(true)});
+let silentRefreshBusy=false,lastNativeAdsSync=0;
+async function silentLiveRefresh(){
+  if(silentRefreshBusy||!state.session||document.visibilityState!=="visible"||!state.store?.id)return;
+  silentRefreshBusy=true;
+  try{
+    const meta=state.integrations.find(x=>x.provider==="meta");
+    const nativeMeta=meta&&meta.metadata?.sync_mode!=="chatgpt_connector";
+    if(nativeMeta&&Date.now()-lastNativeAdsSync>15*60*1000){
+      try{await invoke("syncMeta");lastNativeAdsSync=Date.now()}catch(e){console.warn("Background Meta sync failed",e)}
+    }
+    await loadData();render();
+  }catch(e){console.warn("Live refresh failed",e)}
+  finally{silentRefreshBusy=false}
+}
+setInterval(silentLiveRefresh,60*1000);
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")silentLiveRefresh()});
 boot();
