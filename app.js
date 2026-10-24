@@ -3,7 +3,7 @@ const SUPABASE_KEY="sb_publishable_Ow4gfh354q6hFXNtkEVIqg_VGUEbvqL";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const API=SUPABASE_URL+"/functions/v1/profit-api";
 
-const state={session:null,store:null,stores:[],addingStore:false,editingShopify:false,daily:[],dailyAll:[],previousDaily:[],ads:[],orders:[],products:[],expenses:[],creatives:[],customerDaily:[],customerSummary:null,subscriptions:[],subscriptionSummary:null,subscriptionStatuses:[],cohortMonthly:[],cohortWeekly:[],anomalyAlerts:[],attributionSummary:[],integrations:[],runs:[],range:7,provider:"all",authMode:"signin"};
+const state={session:null,store:null,stores:[],addingStore:false,editingShopify:false,daily:[],dailyAll:[],previousDaily:[],ads:[],orders:[],products:[],expenses:[],creatives:[],creativeDaily:[],customerDaily:[],customerSummary:null,subscriptions:[],subscriptionSummary:null,subscriptionStatuses:[],cohortMonthly:[],cohortWeekly:[],anomalyAlerts:[],attributionSummary:[],attributionDaily:[],freshness:null,integrations:[],runs:[],range:7,provider:"all",authMode:"signin"};
 
 const $=id=>document.getElementById(id);
 const money=(v,c="USD")=>new Intl.NumberFormat("en-US",{style:"currency",currency:c,maximumFractionDigits:2}).format(Number(v||0));
@@ -101,13 +101,14 @@ async function loadData(){
   const extendedStart=isoStart(extendedDays);
   const currentStart=isoStart(state.range);
   const storeId=state.store?.id;if(!storeId)return;
-  const [dailyAll,ads,orders,products,expenses,creatives,customerDaily,customerSummary,subscriptions,subscriptionSummary,subscriptionStatuses,cohortMonthly,cohortWeekly,anomalyAlerts,attributionSummary]=await Promise.all([
+  const [dailyAll,ads,orders,products,expenses,creatives,creativeDaily,customerDaily,customerSummary,subscriptions,subscriptionSummary,subscriptionStatuses,cohortMonthly,cohortWeekly,anomalyAlerts,attributionSummary,attributionDaily,freshness]=await Promise.all([
     sb.from("daily_profit").select("*").eq("store_id",storeId).gte("day",extendedStart).order("day"),
     sb.from("ad_daily").select("*").eq("store_id",storeId).gte("day",currentStart).order("spend",{ascending:false}),
     sb.from("order_profitability").select("*").eq("store_id",storeId).gte("created_at",currentStart+"T00:00:00Z").order("created_at",{ascending:false}).limit(500),
     sb.from("product_profitability").select("*").eq("store_id",storeId).order("gross_contribution",{ascending:false}).limit(100),
     sb.from("expenses").select("*").eq("store_id",storeId).gte("day",currentStart).order("day",{ascending:false}),
     sb.from("creative_profitability").select("*").eq("store_id",storeId).order("profit",{ascending:false}).limit(300),
+    sb.from("creative_daily_profitability").select("*").eq("store_id",storeId).gte("day",currentStart).order("day"),
     sb.from("customer_economics_daily").select("*").eq("store_id",storeId).gte("day",extendedStart).order("day"),
     sb.from("customer_summary").select("*").eq("store_id",storeId).maybeSingle(),
     sb.from("subscription_contract_economics").select("*").eq("store_id",storeId).order("ltv_contribution_profit",{ascending:false}).limit(300),
@@ -116,16 +117,18 @@ async function loadData(){
     sb.from("subscription_cohorts_monthly").select("*").eq("store_id",storeId).order("cohort_month").order("period_index"),
     sb.from("subscription_cohorts_weekly").select("*").eq("store_id",storeId).order("cohort_week").order("period_index"),
     sb.from("profit_anomaly_alerts").select("*").eq("store_id",storeId).gte("day",extendedStart).order("day",{ascending:false}).limit(20),
-    sb.from("attribution_summary").select("*").eq("store_id",storeId)
+    sb.from("attribution_summary").select("*").eq("store_id",storeId),
+    sb.from("attribution_daily_summary").select("*").eq("store_id",storeId).gte("day",currentStart),
+    sb.from("data_freshness").select("*").eq("store_id",storeId).maybeSingle()
   ]);
-  for(const x of [dailyAll,ads,orders,products,expenses,creatives,customerDaily,customerSummary,subscriptions,subscriptionSummary,subscriptionStatuses,cohortMonthly,cohortWeekly,anomalyAlerts,attributionSummary])if(x.error)console.warn(x.error);
+  for(const x of [dailyAll,ads,orders,products,expenses,creatives,creativeDaily,customerDaily,customerSummary,subscriptions,subscriptionSummary,subscriptionStatuses,cohortMonthly,cohortWeekly,anomalyAlerts,attributionSummary,attributionDaily,freshness])if(x.error)console.warn(x.error);
   state.dailyAll=dailyAll.data||[];
   state.daily=state.dailyAll.filter(x=>x.day>=currentStart);
   const prevEnd=new Date(new Date(currentStart+"T00:00:00Z").getTime()-86400000).toISOString().slice(0,10);
   const prevStart=new Date(new Date(currentStart+"T00:00:00Z").getTime()-state.range*86400000).toISOString().slice(0,10);
   state.previousDaily=state.dailyAll.filter(x=>x.day>=prevStart&&x.day<=prevEnd);
   state.ads=ads.data||[];state.orders=orders.data||[];state.products=products.data||[];state.expenses=expenses.data||[];
-  state.creatives=creatives.data||[];
+  state.creatives=creatives.data||[];state.creativeDaily=creativeDaily.data||[];
   state.customerDaily=(customerDaily.data||[]).filter(x=>x.day>=currentStart);
   state.customerSummary=customerSummary.data||null;
   state.subscriptions=subscriptions.data||[];
@@ -135,6 +138,8 @@ async function loadData(){
   state.cohortWeekly=cohortWeekly.data||[];
   state.anomalyAlerts=anomalyAlerts.data||[];
   state.attributionSummary=attributionSummary.data||[];
+  state.attributionDaily=attributionDaily.data||[];
+  state.freshness=freshness.data||null;
 }
 function summary(rows=state.daily){
   const d=rows;
@@ -179,6 +184,7 @@ function render(){
   renderExpenses(currency);
   renderSettings();
   renderHealth();
+  renderFreshness();
   attachMetricExplainers();
 }
 function delta(current,previous){
@@ -242,38 +248,102 @@ function attachMetricExplainers(){
 }
 $("metric-drawer-close").onclick=()=>$("metric-drawer").classList.add("hidden");
 
+function creativeRangeAgg(){
+  const metaMap=new Map((state.creatives||[]).map(x=>[(x.provider||"unknown")+"|"+(x.ad_id||""),x]));
+  const map={};
+  for(const r of state.creativeDaily||[]){
+    const key=(r.provider||"unknown")+"|"+(r.ad_id||"");
+    const meta=metaMap.get(key)||r;
+    if(!map[key]) map[key]={
+      ...meta,provider:r.provider||meta.provider||"unknown",ad_id:r.ad_id||meta.ad_id||"",ad_name:r.ad_name||meta.ad_name||"Unnamed creative",
+      campaign_name:r.campaign_name||meta.campaign_name||"",spend:0,orders:0,revenue:0,pre_ad_contribution:0,profit:0,
+      impressions:0,clicks:0,platform_revenue:0,view_through_orders:0,confidenceWeighted:0,confidenceWeight:0
+    };
+    const x=map[key];
+    x.spend+=n(r.spend);x.orders+=n(r.orders);x.revenue+=n(r.revenue);x.pre_ad_contribution+=n(r.pre_ad_contribution);
+    x.impressions+=n(r.impressions);x.clicks+=n(r.clicks);x.platform_revenue+=n(r.platform_revenue);x.view_through_orders+=n(r.view_through_orders);
+    const w=Math.max(1,n(r.orders));x.confidenceWeighted+=n(r.attribution_confidence)*w;x.confidenceWeight+=w;
+  }
+  const arr=Object.values(map).map(x=>{
+    x.profit=x.pre_ad_contribution-x.spend;
+    x.cpa=x.orders?x.spend/x.orders:0;
+    x.true_roas=x.spend?x.revenue/x.spend:0;
+    x.platform_roas=x.spend?x.platform_revenue/x.spend:0;
+    x.attribution_confidence=x.confidenceWeight?x.confidenceWeighted/x.confidenceWeight:0;
+    const baseline=n(x.store_break_even_cpa||x.break_even_cpa||0);
+    x.break_even_cpa=x.orders?x.pre_ad_contribution/x.orders:baseline;
+    if(x.orders>=5&&x.break_even_cpa>0&&x.cpa<=x.break_even_cpa*.8&&x.profit>0&&x.attribution_confidence>=.6) x.recommendation="scale";
+    else if(x.orders>=3&&x.break_even_cpa>0&&x.cpa<=x.break_even_cpa*1.05&&x.profit>=0) x.recommendation="hold";
+    else if(x.orders===0&&baseline>0&&x.spend>=baseline*2) x.recommendation="kill";
+    else if(x.orders>=3&&x.break_even_cpa>0&&x.cpa>x.break_even_cpa*1.25&&x.spend>=Math.max(baseline*2,x.break_even_cpa*2)) x.recommendation="kill";
+    else x.recommendation="watch";
+    x.data_strength=x.orders>=5&&x.spend>=Math.max(baseline*3,1)?"meaningful":(x.orders>=2||x.spend>=Math.max(baseline*1.5,1)?"developing":"early");
+    x.decision_reason=x.data_strength==="early"?"Not enough statistically useful spend/order evidence for a stronger decision yet.":
+      (x.recommendation==="scale"?"5+ orders, CPA at least 20% below break-even, positive profit and adequate attribution confidence.":
+      x.recommendation==="hold"?"3+ orders with CPA at or below break-even and positive contribution profit.":
+      x.recommendation==="kill"?(x.orders===0?"No attributed orders after spending at least 2× break-even CPA.":"CPA is materially above break-even after meaningful spend."):
+      "More data is needed before a stronger decision.");
+    return x;
+  });
+  return arr.sort((a,b)=>b.spend-a.spend);
+}
+function rangeAttributionSummary(){
+  const out={};
+  for(const r of state.attributionDaily||[]){
+    const m=r.model||"unknown";
+    out[m]||={model:m,attributed_orders:0,attributed_revenue:0,confidenceWeighted:0,confidenceWeight:0,meta_orders:0,google_orders:0,tiktok_orders:0,first_party_session_matches:0,view_through_orders:0};
+    const x=out[m],w=Math.max(1,n(r.attributed_orders));
+    x.attributed_orders+=n(r.attributed_orders);x.attributed_revenue+=n(r.attributed_revenue);x.confidenceWeighted+=n(r.avg_confidence)*w;x.confidenceWeight+=w;
+    x.meta_orders+=n(r.meta_orders);x.google_orders+=n(r.google_orders);x.tiktok_orders+=n(r.tiktok_orders);
+    x.first_party_session_matches+=n(r.first_party_session_matches);x.view_through_orders+=n(r.view_through_orders);
+  }
+  Object.values(out).forEach(x=>x.avg_confidence=x.confidenceWeight?x.confidenceWeighted/x.confidenceWeight:0);
+  return out;
+}
+function renderFreshness(){
+  const el=$("freshness-badge");if(!el)return;
+  const f=state.freshness||{},today=new Date().toISOString().slice(0,10),latest=f.latest_ad_day||null;
+  const updated=f.latest_ad_update_at?new Date(f.latest_ad_update_at):null;
+  const minutes=updated?Math.max(0,Math.round((Date.now()-updated.getTime())/60000)):null;
+  const stale=!latest||latest<today||minutes==null||minutes>90;
+  el.className="freshness-badge "+(stale?"stale":"live");
+  el.innerHTML=stale?'<i class="fa-solid fa-triangle-exclamation"></i> Data stale':('<i class="fa-solid fa-circle"></i> Ads updated '+(minutes<2?"just now":minutes+"m ago"));
+  el.title=latest?"Latest ad day: "+latest:"No ad data synced";
+}
+
 function renderCreatives(currency){
-  const arr=state.creatives||[];
+  const arr=creativeRangeAgg();
   const spend=sum(arr,"spend"),orders=sum(arr,"orders"),revenue=sum(arr,"revenue"),profit=sum(arr,"profit");
   $("creative-metrics").innerHTML=[
-    metric("Spend",money(spend,currency),arr.length+" creatives"),
-    metric("Orders",Math.round(orders).toString(),"Shopify-attributed"),
-    metric("Revenue",money(revenue,currency),"Attributed Shopify revenue"),
-    metric("True profit",money(profit,currency),"After creative spend",profit>=0?"good":"bad"),
-    metric("Margin",pct(revenue?profit/revenue:0),"Creative contribution margin"),
+    metric("Spend",money(spend,currency),arr.length+" creatives in selected range"),
+    metric("Orders",Math.round(orders).toString(),"Shopify-attributed in selected range"),
+    metric("Revenue",money(revenue,currency),"Attributed Shopify revenue in selected range"),
+    metric("True profit",money(profit,currency),"Selected-range contribution after creative spend",profit>=0?"good":"bad"),
+    metric("Margin",pct(revenue?profit/revenue:0),"Selected-range creative contribution margin"),
     metric("CPA",money(orders?spend/orders:0,currency),"Spend ÷ attributed orders")
   ].join("");
   $("creative-grid").innerHTML=arr.length?arr.map(x=>{
     const thumb=x.thumbnail_url||x.media_url||"";
     const media=thumb?'<img src="'+esc(thumb)+'" loading="lazy" referrerpolicy="no-referrer" alt="">':'<div class="creative-placeholder">'+esc((x.media_type||x.format||"AD").toUpperCase())+'</div>';
     const strength=x.data_strength||"early";
+    const days=Math.max(1,Math.min(state.range,Math.ceil((Date.now()-new Date(x.first_seen_at||Date.now()).getTime())/86400000)+1));
     return '<article class="creative-card">'+
       '<div class="creative-media">'+media+'<span class="provider">'+providerIcon(x.provider||"unknown")+' '+esc(x.provider||"unknown")+'</span></div>'+
       '<div class="creative-body"><div class="creative-head"><div><b>'+esc(x.ad_name||"Unnamed creative")+'</b><small>'+esc(x.campaign_name||"")+'</small></div><span class="signal '+esc(x.recommendation||"watch")+'">'+esc(x.recommendation||"watch")+'</span></div>'+
       '<div class="decision-note"><b>'+esc(strength)+' data</b><span>'+esc(x.decision_reason||"Waiting for enough spend and orders.")+'</span></div>'+
-      '<div class="creative-kpis"><div><span>Spend</span><b>'+money(x.spend,currency)+'</b></div><div><span>Orders</span><b>'+x.orders+'</b></div><div><span>Revenue</span><b>'+money(x.revenue,currency)+'</b></div><div><span>CPA</span><b>'+money(x.cpa,currency)+'</b></div><div><span>Break-even CPA</span><b>'+money(x.break_even_cpa||x.store_break_even_cpa,currency)+'</b></div><div><span>True ROAS</span><b>'+n(x.true_roas).toFixed(2)+'×</b></div><div><span>Profit</span><b class="'+(n(x.profit)>=0?"positive":"negative")+'">'+money(x.profit,currency)+'</b></div><div><span>Confidence</span><b>'+pct(x.attribution_confidence)+'</b></div></div>'+
-      '<div class="creative-tags"><span>Hook: '+esc(x.hook||"Not tagged")+'</span><span>Angle: '+esc(x.angle||"Not tagged")+'</span><span>Format: '+esc(x.format||x.media_type||"Unknown")+'</span><span>'+esc(String(x.days_running||1))+' days running</span><span>'+n(x.view_through_orders)+' view-through</span></div>'+
+      '<div class="creative-kpis"><div><span>Spend</span><b>'+money(x.spend,currency)+'</b></div><div><span>Orders</span><b>'+Math.round(n(x.orders))+'</b></div><div><span>Revenue</span><b>'+money(x.revenue,currency)+'</b></div><div><span>CPA</span><b>'+money(x.cpa,currency)+'</b></div><div><span>Break-even CPA</span><b>'+money(x.break_even_cpa||x.store_break_even_cpa,currency)+'</b></div><div><span>True ROAS</span><b>'+n(x.true_roas).toFixed(2)+'×</b></div><div><span>Profit</span><b class="'+(n(x.profit)>=0?"positive":"negative")+'">'+money(x.profit,currency)+'</b></div><div><span>Confidence</span><b>'+pct(x.attribution_confidence)+'</b></div></div>'+
+      '<div class="creative-tags"><span>Hook: '+esc(x.hook||"Not tagged")+'</span><span>Angle: '+esc(x.angle||"Not tagged")+'</span><span>Format: '+esc(x.format||x.media_type||"Unknown")+'</span><span>'+days+' days in range</span><span>'+n(x.view_through_orders)+' view-through</span></div>'+
       '</div></article>';
-  }).join(""):'<div class="empty">Sync ad data and Shopify attribution to populate creative profit.</div>';
+  }).join(""):'<div class="empty">No creative activity in this date range.</div>';
 
-  const coverage=Object.fromEntries((state.attributionSummary||[]).map(x=>[x.model,x]));
+  const coverage=rangeAttributionSummary();
   const det=coverage.deterministic||{},blend=coverage.blended||{},modeled=coverage.modeled||{};
   $("attribution-coverage").innerHTML=[
     '<div class="coverage"><span>Deterministic orders</span><b>'+n(det.attributed_orders)+'</b><small>'+pct(det.avg_confidence||0)+' avg confidence</small></div>',
-    '<div class="coverage"><span>First-party session matches</span><b>'+n(det.first_party_session_matches)+'</b><small>Session/cart evidence</small></div>',
+    '<div class="coverage"><span>First-party session matches</span><b>'+n(det.first_party_session_matches)+'</b><small>Selected date range</small></div>',
     '<div class="coverage"><span>Modeled orders</span><b>'+n(modeled.attributed_orders)+'</b><small>'+pct(modeled.avg_confidence||0)+' avg confidence</small></div>',
-    '<div class="coverage"><span>View-through matches</span><b>'+n(blend.view_through_orders||det.view_through_orders)+'</b><small>Only counted when a provider supplies deterministic post-view evidence</small></div>',
-    '<div class="coverage"><span>Blended coverage</span><b>'+n(blend.attributed_orders)+'</b><small>'+money(blend.attributed_revenue||0,currency)+' revenue mapped</small></div>'
+    '<div class="coverage"><span>View-through matches</span><b>'+n(blend.view_through_orders||det.view_through_orders)+'</b><small>Selected date range</small></div>',
+    '<div class="coverage"><span>Blended coverage</span><b>'+n(blend.attributed_orders)+'</b><small>'+money(blend.attributed_revenue||0,currency)+' mapped in range</small></div>'
   ].join("");
 }
 function renderCustomers(currency){
@@ -426,12 +496,10 @@ function adAgg(){
 }
 function signal(roas){return roas>=3?"scale":roas>=2?"hold":roas>=1.5?"watch":"kill"}
 function renderTopAds(){
-  const arr=(state.creatives||[]).filter(x=>n(x.spend)>0).sort((a,b)=>n(b.spend)-n(a.spend)).slice(0,8);
+  const arr=creativeRangeAgg().filter(x=>n(x.spend)>0).slice(0,8);
   if(arr.length){
     $("top-ads-body").innerHTML=arr.map(a=>'<tr><td><b>'+esc(a.ad_name)+'</b><small>'+esc(a.data_strength||"early")+' data</small></td><td><span class="provider">'+providerIcon(a.provider)+' '+esc(a.provider)+'</span></td><td>'+money(a.spend)+'</td><td>'+money(a.revenue)+'</td><td>'+n(a.true_roas).toFixed(2)+'×</td><td>'+Math.round(n(a.orders))+'</td><td><span class="signal '+esc(a.recommendation||"watch")+'" title="'+esc(a.decision_reason||"")+'">'+esc(a.recommendation||"watch")+'</span></td></tr>').join("");
-  }else{
-    $("top-ads-body").innerHTML='<tr><td colspan="7" class="empty">No ad data yet.</td></tr>';
-  }
+  }else $("top-ads-body").innerHTML='<tr><td colspan="7" class="empty">No ad activity in this date range.</td></tr>';
 }
 function renderProfit(s,c){
   $("profit-metrics").innerHTML=[metric("Gross sales",money(s.gross,c)),metric("Net revenue",money(s.net,c)),metric("Pre-ad contribution",money(s.preAd,c)),metric("Ad spend",money(s.adSpend,c)),metric("True profit",money(s.profit,c),"",s.profit>=0?"good":"bad"),metric("Margin",pct(s.margin))].join("");
@@ -518,14 +586,18 @@ function renderSettings(){
 }
 function renderHealth(){
   const shopify=state.integrations.find(x=>x.provider==="shopify");
+  const meta=state.integrations.find(x=>x.provider==="meta");
   const synced=state.integrations.some(x=>x.last_sync_at);
-  const hasError=state.integrations.some(x=>x.last_error);
+  const hardErrors=state.integrations.filter(x=>x.provider!=="meta").some(x=>x.last_error);
+  const latest=state.freshness?.latest_ad_day||null;
+  const today=new Date().toISOString().slice(0,10);
+  const adsStale=Boolean(meta)&&(!latest||latest<today);
+  const hasError=hardErrors||adsStale;
   $("health-dot").classList.toggle("good",synced&&!hasError);
-  $("health-title").textContent=hasError?"Connection needs attention":synced?"Data syncing":shopify?"Shopify connected":"Setup incomplete";
+  $("health-title").textContent=adsStale?"Ad data is stale":hardErrors?"Connection needs attention":synced?"Data syncing":shopify?"Shopify connected":"Setup incomplete";
   const last=state.integrations.map(x=>x.last_sync_at).filter(Boolean).sort().pop();
-  $("health-sub").textContent=hasError?"Open Settings to repair":last?"Last sync "+new Date(last).toLocaleString():shopify?"Run your first sync":"Connect Shopify + ads";
+  $("health-sub").textContent=adsStale?"Meta ledger is behind today":hardErrors?"Open Settings to repair":last?"Last sync "+new Date(last).toLocaleString():shopify?"Run your first sync":"Connect Shopify + ads";
 }
-
 $("shopify-form").onsubmit=async e=>{
   e.preventDefault();
   const payload=Object.fromEntries(new FormData(e.target));
